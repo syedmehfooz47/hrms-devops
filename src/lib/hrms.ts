@@ -28,3 +28,30 @@ export function workedHours(checkIn?: string | null, checkOut?: string | null) {
   const ms = new Date(checkOut).getTime() - new Date(checkIn).getTime();
   return Math.max(0, ms / 3_600_000);
 }
+
+export type AttendanceStatus = "present" | "absent" | "late" | "half_day" | "pending";
+
+export function attendanceStatus(row?: { check_in?: string | null; check_out?: string | null } | null): AttendanceStatus {
+  if (!row || !row.check_in) return "absent";
+  const checkIn = new Date(row.check_in);
+  const lateThreshold = new Date(checkIn);
+  lateThreshold.setHours(9, 30, 0, 0);
+  const isLate = checkIn.getTime() > lateThreshold.getTime();
+  if (!row.check_out) return isLate ? "late" : "pending";
+  const h = workedHours(row.check_in, row.check_out);
+  if (h < 4) return "half_day";
+  return isLate ? "late" : "present";
+}
+
+export const statusColor: Record<AttendanceStatus, string> = {
+  present: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+  absent: "bg-destructive/15 text-destructive border-destructive/30",
+  late: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+  half_day: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
+  pending: "bg-muted text-muted-foreground border-border",
+};
+
+export const statusLabel: Record<AttendanceStatus, string> = {
+  present: "Present", absent: "Absent", late: "Late", half_day: "Half Day", pending: "Pending",
+};
+
