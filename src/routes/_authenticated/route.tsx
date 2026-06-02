@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
+import { NotificationsBell } from "@/components/notifications-bell";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -129,6 +130,8 @@ function AuthenticatedLayout() {
               <SidebarTrigger />
               <div className="text-sm text-muted-foreground capitalize">{pathname.split("/").filter(Boolean).join(" / ") || "Home"}</div>
             </div>
+            <div className="flex items-center gap-1">
+            <NotificationsBell />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2 h-9 px-2">
@@ -151,6 +154,7 @@ function AuthenticatedLayout() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           </header>
 
           <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">
