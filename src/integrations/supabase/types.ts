@@ -281,6 +281,117 @@ export type Database = {
         }
         Relationships: []
       }
+      payroll_runs: {
+        Row: {
+          created_at: string
+          id: string
+          month: number
+          notes: string | null
+          processed_at: string | null
+          processed_by: string | null
+          status: Database["public"]["Enums"]["payroll_status"]
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: number
+          notes?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: Database["public"]["Enums"]["payroll_status"]
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: number
+          notes?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: Database["public"]["Enums"]["payroll_status"]
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
+      }
+      payslips: {
+        Row: {
+          allowances: number
+          basic: number
+          created_at: string
+          employee_id: string
+          gross: number
+          hra: number
+          id: string
+          month: number
+          net: number
+          other_deductions: number
+          paid_days: number
+          pf: number
+          run_id: string
+          tax: number
+          updated_at: string
+          working_days: number
+          year: number
+        }
+        Insert: {
+          allowances?: number
+          basic?: number
+          created_at?: string
+          employee_id: string
+          gross?: number
+          hra?: number
+          id?: string
+          month: number
+          net?: number
+          other_deductions?: number
+          paid_days?: number
+          pf?: number
+          run_id: string
+          tax?: number
+          updated_at?: string
+          working_days?: number
+          year: number
+        }
+        Update: {
+          allowances?: number
+          basic?: number
+          created_at?: string
+          employee_id?: string
+          gross?: number
+          hra?: number
+          id?: string
+          month?: number
+          net?: number
+          other_deductions?: number
+          paid_days?: number
+          pf?: number
+          run_id?: string
+          tax?: number
+          updated_at?: string
+          working_days?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payslips_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslips_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -353,6 +464,7 @@ export type Database = {
       employment_type: "full_time" | "part_time" | "contract" | "intern"
       leave_status: "pending" | "approved" | "rejected" | "cancelled"
       leave_type: "casual" | "sick" | "earned" | "unpaid"
+      payroll_status: "draft" | "processed" | "paid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -485,6 +597,7 @@ export const Constants = {
       employment_type: ["full_time", "part_time", "contract", "intern"],
       leave_status: ["pending", "approved", "rejected", "cancelled"],
       leave_type: ["casual", "sick", "earned", "unpaid"],
+      payroll_status: ["draft", "processed", "paid"],
     },
   },
 } as const
