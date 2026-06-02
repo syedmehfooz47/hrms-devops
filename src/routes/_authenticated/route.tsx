@@ -73,7 +73,7 @@ function AuthenticatedLayout() {
     navigate({ to: "/auth", replace: true });
   };
 
-  const initials = (profile?.full_name || user.email || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const initials = (profile?.full_name || user.email || "?").split(" ").map((p: string) => p[0]).slice(0, 2).join("").toUpperCase();
   const roleLabel = roles?.[0]?.replace("_", " ") ?? "employee";
 
   return (
