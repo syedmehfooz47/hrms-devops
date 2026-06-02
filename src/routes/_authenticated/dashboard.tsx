@@ -161,5 +161,4 @@ function Dashboard() {
     </div>
   );
 }
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _ = colors; // suppress unused warning if any
+
