@@ -150,6 +150,47 @@ export type Database = {
           },
         ]
       }
+      leave_balances: {
+        Row: {
+          allocated: number
+          created_at: string
+          employee_id: string
+          id: string
+          leave_type: Database["public"]["Enums"]["leave_type"]
+          updated_at: string
+          used: number
+          year: number
+        }
+        Insert: {
+          allocated?: number
+          created_at?: string
+          employee_id: string
+          id?: string
+          leave_type: Database["public"]["Enums"]["leave_type"]
+          updated_at?: string
+          used?: number
+          year?: number
+        }
+        Update: {
+          allocated?: number
+          created_at?: string
+          employee_id?: string
+          id?: string
+          leave_type?: Database["public"]["Enums"]["leave_type"]
+          updated_at?: string
+          used?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_balances_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_requests: {
         Row: {
           approver_id: string | null
@@ -206,6 +247,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          kind: string
+          link: string | null
+          read: boolean
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          link?: string | null
+          read?: boolean
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          link?: string | null
+          read?: boolean
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
