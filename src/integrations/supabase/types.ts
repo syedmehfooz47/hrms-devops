@@ -392,6 +392,99 @@ export type Database = {
           },
         ]
       }
+      performance_goals: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          employee_id: string
+          id: string
+          progress: number
+          status: Database["public"]["Enums"]["goal_status"]
+          target_date: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          employee_id: string
+          id?: string
+          progress?: number
+          status?: Database["public"]["Enums"]["goal_status"]
+          target_date?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          employee_id?: string
+          id?: string
+          progress?: number
+          status?: Database["public"]["Enums"]["goal_status"]
+          target_date?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      performance_reviews: {
+        Row: {
+          acknowledged_at: string | null
+          created_at: string
+          employee_id: string
+          feedback: string | null
+          id: string
+          improvements: string | null
+          period_end: string | null
+          period_label: string
+          period_start: string | null
+          rating: number
+          reviewer_id: string
+          status: Database["public"]["Enums"]["review_status"]
+          strengths: string | null
+          updated_at: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          created_at?: string
+          employee_id: string
+          feedback?: string | null
+          id?: string
+          improvements?: string | null
+          period_end?: string | null
+          period_label: string
+          period_start?: string | null
+          rating: number
+          reviewer_id: string
+          status?: Database["public"]["Enums"]["review_status"]
+          strengths?: string | null
+          updated_at?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          created_at?: string
+          employee_id?: string
+          feedback?: string | null
+          id?: string
+          improvements?: string | null
+          period_end?: string | null
+          period_label?: string
+          period_start?: string | null
+          rating?: number
+          reviewer_id?: string
+          status?: Database["public"]["Enums"]["review_status"]
+          strengths?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -462,9 +555,11 @@ export type Database = {
       app_role: "admin" | "hr_manager" | "dept_manager" | "employee"
       employment_status: "active" | "on_leave" | "terminated" | "probation"
       employment_type: "full_time" | "part_time" | "contract" | "intern"
+      goal_status: "not_started" | "in_progress" | "completed" | "cancelled"
       leave_status: "pending" | "approved" | "rejected" | "cancelled"
       leave_type: "casual" | "sick" | "earned" | "unpaid"
       payroll_status: "draft" | "processed" | "paid"
+      review_status: "draft" | "submitted" | "acknowledged"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -595,9 +690,11 @@ export const Constants = {
       app_role: ["admin", "hr_manager", "dept_manager", "employee"],
       employment_status: ["active", "on_leave", "terminated", "probation"],
       employment_type: ["full_time", "part_time", "contract", "intern"],
+      goal_status: ["not_started", "in_progress", "completed", "cancelled"],
       leave_status: ["pending", "approved", "rejected", "cancelled"],
       leave_type: ["casual", "sick", "earned", "unpaid"],
       payroll_status: ["draft", "processed", "paid"],
+      review_status: ["draft", "submitted", "acknowledged"],
     },
   },
 } as const
