@@ -49,6 +49,59 @@ export type Database = {
           },
         ]
       }
+      candidates: {
+        Row: {
+          applied_at: string
+          cover_letter: string | null
+          email: string
+          full_name: string
+          id: string
+          job_id: string
+          notes: string | null
+          phone: string | null
+          resume_url: string | null
+          source: string | null
+          stage: Database["public"]["Enums"]["candidate_stage"]
+          updated_at: string
+        }
+        Insert: {
+          applied_at?: string
+          cover_letter?: string | null
+          email: string
+          full_name: string
+          id?: string
+          job_id: string
+          notes?: string | null
+          phone?: string | null
+          resume_url?: string | null
+          source?: string | null
+          stage?: Database["public"]["Enums"]["candidate_stage"]
+          updated_at?: string
+        }
+        Update: {
+          applied_at?: string
+          cover_letter?: string | null
+          email?: string
+          full_name?: string
+          id?: string
+          job_id?: string
+          notes?: string | null
+          phone?: string | null
+          resume_url?: string | null
+          source?: string | null
+          stage?: Database["public"]["Enums"]["candidate_stage"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidates_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_postings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       departments: {
         Row: {
           created_at: string
@@ -149,6 +202,110 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      interviews: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          duration_minutes: number
+          feedback: string | null
+          id: string
+          interviewer_id: string | null
+          location: string | null
+          mode: string | null
+          rating: number | null
+          round: string | null
+          scheduled_at: string
+          status: Database["public"]["Enums"]["interview_status"]
+          updated_at: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          duration_minutes?: number
+          feedback?: string | null
+          id?: string
+          interviewer_id?: string | null
+          location?: string | null
+          mode?: string | null
+          rating?: number | null
+          round?: string | null
+          scheduled_at: string
+          status?: Database["public"]["Enums"]["interview_status"]
+          updated_at?: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          duration_minutes?: number
+          feedback?: string | null
+          id?: string
+          interviewer_id?: string | null
+          location?: string | null
+          mode?: string | null
+          rating?: number | null
+          round?: string | null
+          scheduled_at?: string
+          status?: Database["public"]["Enums"]["interview_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interviews_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_postings: {
+        Row: {
+          created_at: string
+          department_id: string | null
+          description: string | null
+          employment_type: Database["public"]["Enums"]["employment_type"]
+          id: string
+          location: string | null
+          posted_by: string | null
+          requirements: string | null
+          salary_max: number | null
+          salary_min: number | null
+          status: Database["public"]["Enums"]["job_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department_id?: string | null
+          description?: string | null
+          employment_type?: Database["public"]["Enums"]["employment_type"]
+          id?: string
+          location?: string | null
+          posted_by?: string | null
+          requirements?: string | null
+          salary_max?: number | null
+          salary_min?: number | null
+          status?: Database["public"]["Enums"]["job_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string | null
+          description?: string | null
+          employment_type?: Database["public"]["Enums"]["employment_type"]
+          id?: string
+          location?: string | null
+          posted_by?: string | null
+          requirements?: string | null
+          salary_max?: number | null
+          salary_min?: number | null
+          status?: Database["public"]["Enums"]["job_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       leave_balances: {
         Row: {
@@ -278,6 +435,45 @@ export type Database = {
           read?: boolean
           title?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      onboarding_tasks: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          employee_id: string
+          id: string
+          position: number
+          status: Database["public"]["Enums"]["onboarding_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          employee_id: string
+          id?: string
+          position?: number
+          status?: Database["public"]["Enums"]["onboarding_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          employee_id?: string
+          id?: string
+          position?: number
+          status?: Database["public"]["Enums"]["onboarding_status"]
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -553,11 +749,21 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "hr_manager" | "dept_manager" | "employee"
+      candidate_stage:
+        | "applied"
+        | "screening"
+        | "interview"
+        | "offer"
+        | "hired"
+        | "rejected"
       employment_status: "active" | "on_leave" | "terminated" | "probation"
       employment_type: "full_time" | "part_time" | "contract" | "intern"
       goal_status: "not_started" | "in_progress" | "completed" | "cancelled"
+      interview_status: "scheduled" | "completed" | "cancelled" | "no_show"
+      job_status: "open" | "closed" | "draft"
       leave_status: "pending" | "approved" | "rejected" | "cancelled"
       leave_type: "casual" | "sick" | "earned" | "unpaid"
+      onboarding_status: "pending" | "in_progress" | "done"
       payroll_status: "draft" | "processed" | "paid"
       review_status: "draft" | "submitted" | "acknowledged"
     }
@@ -688,11 +894,22 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "hr_manager", "dept_manager", "employee"],
+      candidate_stage: [
+        "applied",
+        "screening",
+        "interview",
+        "offer",
+        "hired",
+        "rejected",
+      ],
       employment_status: ["active", "on_leave", "terminated", "probation"],
       employment_type: ["full_time", "part_time", "contract", "intern"],
       goal_status: ["not_started", "in_progress", "completed", "cancelled"],
+      interview_status: ["scheduled", "completed", "cancelled", "no_show"],
+      job_status: ["open", "closed", "draft"],
       leave_status: ["pending", "approved", "rejected", "cancelled"],
       leave_type: ["casual", "sick", "earned", "unpaid"],
+      onboarding_status: ["pending", "in_progress", "done"],
       payroll_status: ["draft", "processed", "paid"],
       review_status: ["draft", "submitted", "acknowledged"],
     },
