@@ -163,7 +163,7 @@ function RecruitmentPage() {
                       <Select
                         value={j.status}
                         onValueChange={async (v) => {
-                          const { error } = await supabase.from("job_postings").update({ status: v }).eq("id", j.id);
+                          const { error } = await supabase.from("job_postings").update({ status: v as never }).eq("id", j.id);
                           if (error) toast.error(error.message);
                           else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["jobs"] }); }
                         }}
@@ -203,7 +203,7 @@ function RecruitmentPage() {
                           <Select
                             value={c.stage}
                             onValueChange={async (v) => {
-                              const { error } = await supabase.from("candidates").update({ stage: v }).eq("id", c.id);
+                              const { error } = await supabase.from("candidates").update({ stage: v as never }).eq("id", c.id);
                               if (error) toast.error(error.message);
                               else { toast.success("Moved"); qc.invalidateQueries({ queryKey: ["candidates"] }); }
                             }}
@@ -259,7 +259,7 @@ function RecruitmentPage() {
                             <Select
                               value={i.status}
                               onValueChange={async (v) => {
-                                const { error } = await supabase.from("interviews").update({ status: v }).eq("id", i.id);
+                                const { error } = await supabase.from("interviews").update({ status: v as never }).eq("id", i.id);
                                 if (error) toast.error(error.message);
                                 else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["interviews"] }); }
                               }}
