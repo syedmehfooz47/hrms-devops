@@ -259,7 +259,7 @@ function RecruitmentPage() {
                             <Select
                               value={i.status}
                               onValueChange={async (v) => {
-                                const { error } = await supabase.from("interviews").update({ status: v as never }).eq("id", i.id);
+                                const { error } = await supabase.from("interviews").update({ status: v as "scheduled" | "completed" | "cancelled" | "no_show" }).eq("id", i.id);
                                 if (error) toast.error(error.message);
                                 else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["interviews"] }); }
                               }}
