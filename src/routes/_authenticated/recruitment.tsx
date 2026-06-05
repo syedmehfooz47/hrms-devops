@@ -203,7 +203,7 @@ function RecruitmentPage() {
                           <Select
                             value={c.stage}
                             onValueChange={async (v) => {
-                              const { error } = await supabase.from("candidates").update({ stage: v as never }).eq("id", c.id);
+                              const { error } = await supabase.from("candidates").update({ stage: v as "applied" | "screening" | "interview" | "offer" | "hired" | "rejected" }).eq("id", c.id);
                               if (error) toast.error(error.message);
                               else { toast.success("Moved"); qc.invalidateQueries({ queryKey: ["candidates"] }); }
                             }}
