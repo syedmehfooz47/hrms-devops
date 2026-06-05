@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard, Users, Building2, CalendarDays, Clock, Wallet, Award, Briefcase,
-  FileText, UserCircle, LogOut,
+  FileText, UserCircle, LogOut, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -27,6 +27,7 @@ export const Route = createFileRoute("/_authenticated")({
 
 const navItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, section: "overview" },
+  { title: "Analytics", url: "/analytics", icon: BarChart3, section: "overview" },
   { title: "Employees", url: "/employees", icon: Users, section: "people" },
   { title: "Departments", url: "/departments", icon: Building2, section: "people" },
   { title: "Attendance", url: "/attendance", icon: Clock, section: "time" },
