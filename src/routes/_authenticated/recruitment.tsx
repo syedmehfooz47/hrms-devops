@@ -163,7 +163,7 @@ function RecruitmentPage() {
                       <Select
                         value={j.status}
                         onValueChange={async (v) => {
-                          const { error } = await supabase.from("job_postings").update({ status: v as never }).eq("id", j.id);
+                          const { error } = await supabase.from("job_postings").update({ status: v as "draft" | "open" | "closed" }).eq("id", j.id);
                           if (error) toast.error(error.message);
                           else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["jobs"] }); }
                         }}
