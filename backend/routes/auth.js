@@ -12,7 +12,11 @@ const SECRET = process.env.JWT_SECRET || "hrms_secret_key_2024_pulse";
 router.post("/register", async (req, res) => {
   try {
     const { name, email, password, role, phone } = req.body;
-    const userRole = role || "employee";
+    
+    // Check if this is the first user in the database to auto-assign admin
+    const countRes = await pool.query("SELECT COUNT(*) FROM users");
+    const isFirstUser = parseInt(countRes.rows[0].count) === 0;
+    const userRole = isFirstUser ? "admin" : (role || "employee");
 
     // Check if user already exists
     const checkUser = await pool.query("SELECT * FROM users WHERE email = $1", [email]);

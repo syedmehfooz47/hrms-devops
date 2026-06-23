@@ -61,6 +61,21 @@ router.put("/profile/:id", authenticate, async (req, res) => {
     }
 
     const user = checkUser.rows[0];
+    const isHrOrAdmin = req.user.role === "admin" || req.user.role === "hr_manager";
+    const isSelf = String(req.params.id) === String(req.user.id);
+
+    if (!isHrOrAdmin && !isSelf) {
+      return res.status(403).json({ message: "Insufficient permissions to update this profile" });
+    }
+
+    // Role updates can only be done by HR or Admin
+    let finalRole = user.role;
+    if (role !== undefined && role !== user.role) {
+      if (!isHrOrAdmin) {
+        return res.status(403).json({ message: "Only Admin or HR can update user roles" });
+      }
+      finalRole = role;
+    }
 
     const result = await pool.query(
       `UPDATE users
@@ -77,7 +92,7 @@ router.put("/profile/:id", authenticate, async (req, res) => {
         email || null,
         phone || null,
         avatar_url || null,
-        role || null,
+        finalRole,
         req.params.id,
       ]
     );
