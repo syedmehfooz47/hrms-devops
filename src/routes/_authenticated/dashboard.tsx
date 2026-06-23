@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { dashboardService } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Users, Building2, CalendarDays, Clock, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend } from "recharts";
@@ -15,19 +15,14 @@ function Dashboard() {
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const [emp, dep, leave, att] = await Promise.all([
-        supabase.from("employees").select("id, status", { count: "exact" }),
-        supabase.from("departments").select("id", { count: "exact", head: true }),
-        supabase.from("leave_requests").select("id, status", { count: "exact" }).eq("status", "pending"),
-        supabase.from("attendance").select("id", { count: "exact", head: true }).eq("work_date", new Date().toISOString().slice(0, 10)),
-      ]);
-      const active = emp.data?.filter((e) => e.status === "active").length ?? 0;
+      const res = await dashboardService.getStats();
+      const db = res.dashboard || {};
       return {
-        employees: emp.count ?? 0,
-        active,
-        departments: dep.count ?? 0,
-        pendingLeave: leave.count ?? 0,
-        todayAttendance: att.count ?? 0,
+        employees: db.employees ?? 0,
+        active: db.employees ?? 0,
+        departments: db.departments ?? 0,
+        pendingLeave: db.leaveRequests ?? 0,
+        todayAttendance: db.attendance ?? 0,
       };
     },
   });
@@ -35,23 +30,15 @@ function Dashboard() {
   const { data: deptBreakdown = [] } = useQuery({
     queryKey: ["dept-breakdown"],
     queryFn: async () => {
-      const { data: depts } = await supabase.from("departments").select("id, name");
-      const { data: emps } = await supabase.from("employees").select("department_id");
-      return (depts ?? []).map((d) => ({
-        name: d.name,
-        value: emps?.filter((e) => e.department_id === d.id).length ?? 0,
-      }));
+      const data = await dashboardService.getDeptBreakdown();
+      return data ?? [];
     },
   });
 
   const { data: recentLeave = [] } = useQuery({
     queryKey: ["recent-leave"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("leave_requests")
-        .select("id, leave_type, start_date, end_date, status, employee_id, profiles:profiles!leave_requests_employee_id_fkey(full_name)")
-        .order("created_at", { ascending: false })
-        .limit(5);
+      const data = await dashboardService.getRecentLeave();
       return data ?? [];
     },
   });
@@ -119,7 +106,7 @@ function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={deptBreakdown} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
-                    {deptBreakdown.map((_, i) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
+                    {deptBreakdown.map((_: any, i: number) => <Cell key={i} fill={chartColors[i % chartColors.length]} />)}
                   </Pie>
                   <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8 }} />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />

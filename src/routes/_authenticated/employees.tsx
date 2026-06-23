@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { employeeService, departmentService, userService } from "@/services/api";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,52 +30,44 @@ function EmployeesPage() {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["employees", q, statusFilter],
     queryFn: async () => {
-      let query = supabase
-        .from("employees")
-        .select("*, profiles!inner(id, full_name, email, phone, avatar_url), departments(name)")
-        .order("created_at", { ascending: false });
-      if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
-      const { data, error } = await query;
-      if (error) throw error;
-      const term = q.trim().toLowerCase();
-      return (data ?? []).filter((r: any) =>
-        !term ||
-        r.profiles?.full_name?.toLowerCase().includes(term) ||
-        r.profiles?.email?.toLowerCase().includes(term) ||
-        r.employee_code?.toLowerCase().includes(term) ||
-        r.designation?.toLowerCase().includes(term),
-      );
+      const data = await employeeService.getAll({
+        q: q ? q.trim() : undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+      });
+      return data ?? [];
     },
   });
 
   const { data: departments = [] } = useQuery({
     queryKey: ["departments-list"],
-    queryFn: async () => (await supabase.from("departments").select("id, name").order("name")).data ?? [],
+    queryFn: async () => {
+      const res = await departmentService.getAll();
+      return res ?? [];
+    },
   });
 
   const { data: candidates = [] } = useQuery({
     queryKey: ["non-employees"],
     enabled: canManage,
     queryFn: async () => {
-      const [{ data: profiles }, { data: emps }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, email"),
-        supabase.from("employees").select("id"),
+      const [profiles, emps] = await Promise.all([
+        userService.getProfiles(),
+        employeeService.getAll(),
       ]);
-      const set = new Set((emps ?? []).map((e) => e.id));
-      return (profiles ?? []).filter((p) => !set.has(p.id));
+      const set = new Set((emps ?? []).map((e: any) => String(e.user_id)));
+      return (profiles ?? []).filter((p: any) => !set.has(String(p.id)));
     },
   });
 
   const deleteMut = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("employees").delete().eq("id", id);
-      if (error) throw error;
+    mutationFn: async (id: string | number) => {
+      await employeeService.delete(id);
     },
     onSuccess: () => {
       toast.success("Employee removed");
       qc.invalidateQueries({ queryKey: ["employees"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   return (
@@ -131,7 +123,7 @@ function EmployeesPage() {
                 return (
                   <TableRow key={r.id}>
                     <TableCell>
-                      <Link to="/employees/$id" params={{ id: r.id }} className="flex items-center gap-3 hover:underline">
+                      <Link to="/employees/$id" params={{ id: String(r.id) }} className="flex items-center gap-3 hover:underline">
                         <Avatar className="h-8 w-8"><AvatarFallback className="text-xs">{init}</AvatarFallback></Avatar>
                         <div>
                           <div className="font-medium text-sm">{r.profiles?.full_name || "—"}</div>
@@ -184,17 +176,16 @@ function NewEmployeeDialog({ departments, candidates }: { departments: any[]; ca
     mutationFn: async () => {
       if (!form.profile_id) throw new Error("Pick a user");
       if (!form.employee_code) throw new Error("Employee code is required");
-      const { error } = await supabase.from("employees").insert({
-        id: form.profile_id,
+      await employeeService.create({
+        user_id: form.profile_id,
         employee_code: form.employee_code,
-        department_id: form.department_id || null,
+        department_id: form.department_id ? Number(form.department_id) : null,
         designation: form.designation || null,
-        employment_type: form.employment_type as any,
-        status: form.status as any,
+        employment_type: form.employment_type,
+        status: form.status,
         date_of_joining: form.date_of_joining || null,
         salary_basic: form.salary_basic ? Number(form.salary_basic) : 0,
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Employee added");
@@ -203,7 +194,7 @@ function NewEmployeeDialog({ departments, candidates }: { departments: any[]; ca
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       setOpen(false);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   return (

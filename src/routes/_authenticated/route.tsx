@@ -1,6 +1,6 @@
 import { createFileRoute, redirect, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { authService } from "@/services/api";
+import { useMe } from "@/hooks/use-me";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger,
@@ -14,13 +14,21 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { NotificationsBell } from "@/components/notifications-bell";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { isHrOrAdmin, isManagerOrAbove } from "@/lib/hrms";
+
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/auth" });
-    return { user: data.user };
+    if (!authService.isAuthenticated()) {
+      throw redirect({ to: "/auth" });
+    }
+    const user = authService.getCurrentUser();
+    if (!user) {
+      throw redirect({ to: "/auth" });
+    }
+    return { user };
   },
   component: AuthenticatedLayout,
 });
@@ -52,25 +60,11 @@ function AuthenticatedLayout() {
   const { user } = Route.useRouteContext();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-
-  const { data: profile } = useQuery({
-    queryKey: ["me", user.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-      return data;
-    },
-  });
-
-  const { data: roles } = useQuery({
-    queryKey: ["my-roles", user.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
-      return data?.map((r) => r.role) ?? [];
-    },
-  });
+  const { profile, roles } = useMe();
 
   const onLogout = async () => {
-    await supabase.auth.signOut();
+    authService.logout();
+    window.dispatchEvent(new CustomEvent("auth-state-change"));
     toast.success("Signed out");
     navigate({ to: "/auth", replace: true });
   };
@@ -95,7 +89,16 @@ function AuthenticatedLayout() {
           </SidebarHeader>
           <SidebarContent>
             {sections.map((sec) => {
-              const items = navItems.filter((i) => i.section === sec.id);
+              const items = navItems.filter((i) => {
+                if (i.section !== sec.id) return false;
+                if (i.url === "/analytics" || i.url === "/departments") {
+                  return isHrOrAdmin(roles);
+                }
+                if (i.url === "/recruitment") {
+                  return isManagerOrAbove(roles);
+                }
+                return true;
+              });
               if (!items.length) return null;
               return (
                 <SidebarGroup key={sec.id}>
@@ -132,7 +135,8 @@ function AuthenticatedLayout() {
               <div className="text-sm text-muted-foreground capitalize">{pathname.split("/").filter(Boolean).join(" / ") || "Home"}</div>
             </div>
             <div className="flex items-center gap-1">
-            <NotificationsBell />
+              <ThemeToggle />
+              <NotificationsBell />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2 h-9 px-2">

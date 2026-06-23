@@ -1,21 +1,69 @@
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
-
 export type AppRole = "admin" | "hr_manager" | "dept_manager" | "employee";
 
-export async function getMyRoles(userId: string): Promise<AppRole[]> {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  return (data?.map((r) => r.role) ?? []) as AppRole[];
+export async function getMyRoles(userId: string | number): Promise<AppRole[]> {
+  return [] as AppRole[];
 }
 
 export const isHrOrAdmin = (roles: AppRole[]) => roles.includes("admin") || roles.includes("hr_manager");
 export const isManagerOrAbove = (roles: AppRole[]) => isHrOrAdmin(roles) || roles.includes("dept_manager");
 
-export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-export type Department = Database["public"]["Tables"]["departments"]["Row"];
-export type Employee = Database["public"]["Tables"]["employees"]["Row"];
-export type LeaveRequest = Database["public"]["Tables"]["leave_requests"]["Row"];
-export type Attendance = Database["public"]["Tables"]["attendance"]["Row"];
+export interface Profile {
+  id: string | number;
+  full_name?: string | null;
+  name?: string | null;
+  email?: string | null;
+  avatar_url?: string | null;
+  phone?: string | null;
+}
+
+export interface Department {
+  id: number;
+  name: string;
+  description?: string | null;
+  created_at?: string;
+}
+
+export interface Employee {
+  id: number;
+  user_id?: number | null;
+  employee_code?: string | null;
+  name: string;
+  email: string;
+  department_id?: number | null;
+  department?: string | null;
+  designation?: string | null;
+  employment_type?: string | null;
+  status?: string | null;
+  date_of_joining?: string | null;
+  salary_basic?: number | null;
+  phone?: string | null;
+  created_at?: string;
+}
+
+export interface LeaveRequest {
+  id: number;
+  employee_id: number;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  reason?: string | null;
+  status: string;
+  approver_id?: number | null;
+  approver_note?: string | null;
+  decided_at?: string | null;
+  created_at?: string;
+}
+
+export interface Attendance {
+  id: number;
+  employee_id: number;
+  work_date: string;
+  check_in?: string | null;
+  check_out?: string | null;
+  status: string;
+  created_at?: string;
+}
+
 
 export function daysBetween(start: string, end: string) {
   const s = new Date(start).getTime();

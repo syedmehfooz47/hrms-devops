@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { notificationService } from "@/services/api";
 import { useMe } from "@/hooks/use-me";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -17,43 +17,24 @@ export function NotificationsBell() {
     queryKey: ["notifications", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(20);
+      const data = await notificationService.getAll();
       return data ?? [];
     },
   });
 
-  useEffect(() => {
-    if (!user?.id) return;
-    const ch = supabase
-      .channel(`notif-${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        () => qc.invalidateQueries({ queryKey: ["notifications", user.id] })
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [user?.id, qc]);
-
-  const unread = notifications.filter((n) => !n.read).length;
+  const unread = notifications.filter((n: any) => !n.read).length;
 
   const markAllRead = async () => {
     if (!user?.id) return;
-    await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false);
+    await notificationService.markAllRead();
     qc.invalidateQueries({ queryKey: ["notifications", user.id] });
   };
 
-  const markRead = async (id: string) => {
-    await supabase.from("notifications").update({ read: true }).eq("id", id);
+  const markRead = async (id: string | number) => {
+    await notificationService.markRead(id);
     qc.invalidateQueries({ queryKey: ["notifications", user?.id] });
   };
+
 
   return (
     <Popover>
@@ -80,7 +61,7 @@ export function NotificationsBell() {
           {notifications.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">No notifications</div>
           ) : (
-            notifications.map((n) => {
+            notifications.map((n: any) => {
               const body = (
                 <div className={`px-3 py-2 border-b last:border-0 text-sm hover:bg-muted/40 cursor-pointer ${!n.read ? "bg-primary/5" : ""}`}>
                   <div className="flex items-start justify-between gap-2">

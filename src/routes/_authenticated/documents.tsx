@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { documentService, employeeService } from "@/services/api";
 import { useMe } from "@/hooks/use-me";
 import { isHrOrAdmin } from "@/lib/hrms";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +29,7 @@ function formatBytes(n?: number | null) {
 }
 
 function DocumentsPage() {
-  const { user, roles } = useMe();
+  const { user, roles, employee } = useMe();
   const qc = useQueryClient();
   const hr = isHrOrAdmin(roles);
   const [targetEmp, setTargetEmp] = useState<string>("");
@@ -41,27 +41,30 @@ function DocumentsPage() {
     queryKey: ["doc-employees"],
     enabled: hr,
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
-      return data ?? [];
+      const emps = await employeeService.getAll();
+      return (emps ?? []).map((e: any) => ({
+        id: e.id,
+        full_name: e.name,
+        email: e.email,
+      }));
     },
   });
 
-  const effectiveEmp = hr ? (targetEmp || user?.id || "") : user?.id ?? "";
+  const effectiveEmp = hr ? (targetEmp || employee?.id || "") : employee?.id ?? "";
 
   const docs = useQuery({
     queryKey: ["documents", effectiveEmp],
     enabled: !!effectiveEmp,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("employee_documents" as never)
-        .select("*")
-        .eq("employee_id", effectiveEmp)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Array<{
-        id: string; name: string; category: string; storage_path: string;
-        mime_type: string | null; size_bytes: number | null; created_at: string; employee_id: string;
-      }>;
+      const data = await documentService.getAll(effectiveEmp);
+      return (data ?? []).map((d: any) => ({
+        id: d.id,
+        name: d.document_name,
+        category: d.category,
+        size_bytes: d.size_bytes,
+        created_at: d.created_at,
+        employee_id: d.employee_id,
+      }));
     },
   });
 
@@ -72,52 +75,42 @@ function DocumentsPage() {
     if (file.size > 20 * 1024 * 1024) return toast.error("Max 20MB");
     setUploading(true);
     try {
-      const path = `${effectiveEmp}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const up = await supabase.storage.from("employee-documents").upload(path, file, {
-        contentType: file.type, upsert: false,
-      });
-      if (up.error) throw up.error;
-      const ins = await supabase.from("employee_documents" as never).insert({
-        employee_id: effectiveEmp,
-        uploaded_by: user?.id,
-        name: file.name,
-        category,
-        storage_path: path,
-        mime_type: file.type || null,
-        size_bytes: file.size,
-      } as never);
-      if (ins.error) throw ins.error;
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("employee_id", String(effectiveEmp));
+      formData.append("category", category);
+      await documentService.upload(formData);
       toast.success("Uploaded");
       if (fileRef.current) fileRef.current.value = "";
       qc.invalidateQueries({ queryKey: ["documents", effectiveEmp] });
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || e.message);
     } finally {
       setUploading(false);
     }
   };
 
-  const onDownload = async (path: string, name: string) => {
-    const { data, error } = await supabase.storage.from("employee-documents").createSignedUrl(path, 60);
-    if (error || !data?.signedUrl) return toast.error(error?.message ?? "Failed");
+  const onDownload = (id: string | number) => {
+    const url = documentService.download(id);
     const a = document.createElement("a");
-    a.href = data.signedUrl; a.download = name; a.target = "_blank";
+    a.href = url; a.target = "_blank";
     document.body.appendChild(a); a.click(); a.remove();
   };
 
-  const onDelete = async (id: string, path: string) => {
+  const onDelete = async (id: string | number) => {
     if (!confirm("Delete this document?")) return;
-    const rm = await supabase.storage.from("employee-documents").remove([path]);
-    if (rm.error) return toast.error(rm.error.message);
-    const del = await supabase.from("employee_documents" as never).delete().eq("id", id);
-    if (del.error) return toast.error(del.error.message);
-    toast.success("Deleted");
-    qc.invalidateQueries({ queryKey: ["documents", effectiveEmp] });
+    try {
+      await documentService.delete(id);
+      toast.success("Deleted");
+      qc.invalidateQueries({ queryKey: ["documents", effectiveEmp] });
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || e.message);
+    }
   };
 
   const grouped = useMemo(() => {
     const out: Record<string, number> = {};
-    (docs.data ?? []).forEach((d) => { out[d.category] = (out[d.category] ?? 0) + 1; });
+    (docs.data ?? []).forEach((d: any) => { out[d.category] = (out[d.category] ?? 0) + 1; });
     return out;
   }, [docs.data]);
 
@@ -137,11 +130,11 @@ function DocumentsPage() {
           {hr && (
             <div className="space-y-1">
               <Label className="text-xs">Employee</Label>
-              <Select value={targetEmp || user?.id || ""} onValueChange={setTargetEmp}>
+              <Select value={targetEmp || String(employee?.id || "")} onValueChange={setTargetEmp}>
                 <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                 <SelectContent>
-                  {(employees.data ?? []).map((e) => (
-                    <SelectItem key={e.id} value={e.id}>{e.full_name || e.email}</SelectItem>
+                  {(employees.data ?? []).map((e: any) => (
+                    <SelectItem key={e.id} value={String(e.id)}>{e.full_name || e.email}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -197,17 +190,17 @@ function DocumentsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(docs.data ?? []).map((d) => (
+              {(docs.data ?? []).map((d: any) => (
                 <TableRow key={d.id}>
                   <TableCell className="font-medium">{d.name}</TableCell>
                   <TableCell><Badge variant="secondary" className="capitalize">{d.category.replace("_", " ")}</Badge></TableCell>
                   <TableCell>{formatBytes(d.size_bytes)}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">{new Date(d.created_at).toLocaleString()}</TableCell>
                   <TableCell className="text-right space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => onDownload(d.storage_path, d.name)}>
+                    <Button size="sm" variant="outline" onClick={() => onDownload(d.id)}>
                       <Download className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => onDelete(d.id, d.storage_path)}>
+                    <Button size="sm" variant="ghost" onClick={() => onDelete(d.id)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -223,3 +216,4 @@ function DocumentsPage() {
     </div>
   );
 }
+

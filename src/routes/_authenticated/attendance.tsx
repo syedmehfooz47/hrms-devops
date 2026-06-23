@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { attendanceService, employeeService } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_authenticated/attendance")({
 });
 
 function AttendancePage() {
-  const { user, roles } = useMe();
+  const { roles, employee } = useMe();
   const canManage = isManagerOrAbove(roles);
 
   return (
@@ -38,8 +38,20 @@ function AttendancePage() {
           {canManage && <TabsTrigger value="team"><Users className="h-4 w-4 mr-2" />Team</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="me" className="space-y-5">{user?.id && <MyAttendance userId={user.id} />}</TabsContent>
-        <TabsContent value="reports" className="space-y-5">{user?.id && <Reports userId={user.id} />}</TabsContent>
+        <TabsContent value="me" className="space-y-5">
+          {employee?.id ? (
+            <MyAttendance employeeId={employee.id} />
+          ) : (
+            <div className="text-sm text-muted-foreground p-4">No employee record associated with your user.</div>
+          )}
+        </TabsContent>
+        <TabsContent value="reports" className="space-y-5">
+          {employee?.id ? (
+            <Reports employeeId={employee.id} />
+          ) : (
+            <div className="text-sm text-muted-foreground p-4">No employee record associated with your user.</div>
+          )}
+        </TabsContent>
         {canManage && <TabsContent value="team" className="space-y-5"><TeamAttendance /></TabsContent>}
       </Tabs>
     </div>
@@ -47,49 +59,50 @@ function AttendancePage() {
 }
 
 // ---------------- MY ATTENDANCE ----------------
-function MyAttendance({ userId }: { userId: string }) {
+function MyAttendance({ employeeId }: { employeeId: number | string }) {
   const qc = useQueryClient();
   const today = new Date().toISOString().slice(0, 10);
   const [cursor, setCursor] = useState(new Date());
 
   const { data: todayRow } = useQuery({
-    queryKey: ["attendance-today", userId],
-    queryFn: async () => (await supabase.from("attendance").select("*").eq("employee_id", userId).eq("work_date", today).maybeSingle()).data,
+    queryKey: ["attendance-today", employeeId],
+    queryFn: async () => {
+      try {
+        return await attendanceService.getToday(employeeId);
+      } catch (err) {
+        return null;
+      }
+    },
   });
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
 
   const { data: monthRows = [] } = useQuery({
-    queryKey: ["attendance-month", userId, format(cursor, "yyyy-MM")],
+    queryKey: ["attendance-month", employeeId, format(cursor, "yyyy-MM")],
     queryFn: async () => {
-      const { data } = await supabase.from("attendance").select("*")
-        .eq("employee_id", userId)
-        .gte("work_date", format(monthStart, "yyyy-MM-dd"))
-        .lte("work_date", format(monthEnd, "yyyy-MM-dd"))
-        .order("work_date", { ascending: false });
+      const data = await attendanceService.getMonth(employeeId, cursor.getMonth() + 1, cursor.getFullYear());
       return data ?? [];
     },
   });
 
   const checkIn = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("attendance").insert({ employee_id: userId, work_date: today, check_in: new Date().toISOString() });
-      if (error) throw error;
+      await attendanceService.checkIn(employeeId);
     },
     onSuccess: () => { toast.success("Checked in"); qc.invalidateQueries({ queryKey: ["attendance-today"] }); qc.invalidateQueries({ queryKey: ["attendance-month"] }); qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   const checkOut = useMutation({
     mutationFn: async () => {
       if (!todayRow) throw new Error("No check-in record");
-      const { error } = await supabase.from("attendance").update({ check_out: new Date().toISOString() }).eq("id", todayRow.id);
-      if (error) throw error;
+      await attendanceService.checkOut(todayRow.id);
     },
     onSuccess: () => { toast.success("Checked out"); qc.invalidateQueries({ queryKey: ["attendance-today"] }); qc.invalidateQueries({ queryKey: ["attendance-month"] }); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
+
 
   const hoursToday = workedHours(todayRow?.check_in, todayRow?.check_out);
   const todayStatus = attendanceStatus(todayRow);
@@ -102,7 +115,7 @@ function MyAttendance({ userId }: { userId: string }) {
     const isPast = (d: Date) => d.getTime() <= Date.now();
     for (const d of days) {
       if (isWeekend(d) || !isPast(d)) continue;
-      const row = monthRows.find((r) => isSameDay(new Date(r.work_date), d));
+      const row = monthRows.find((r: any) => isSameDay(new Date(r.work_date), d));
       const s = attendanceStatus(row);
       counts[s]++;
       totalHours += workedHours(row?.check_in, row?.check_out);
@@ -170,7 +183,7 @@ function MyAttendance({ userId }: { userId: string }) {
             </TableHeader>
             <TableBody>
               {monthRows.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-8 text-sm text-muted-foreground">No records for this month.</TableCell></TableRow>}
-              {monthRows.map((r) => {
+              {monthRows.map((r: any) => {
                 const h = workedHours(r.check_in, r.check_out);
                 const ot = Math.max(0, h - 8);
                 const s = attendanceStatus(r);
@@ -233,18 +246,15 @@ function MonthCalendar({ cursor, rows }: { cursor: Date; rows: Array<{ work_date
 }
 
 // ---------------- REPORTS ----------------
-function Reports({ userId }: { userId: string }) {
+function Reports({ employeeId }: { employeeId: number | string }) {
   const [cursor, setCursor] = useState(new Date());
   const start = startOfMonth(cursor);
   const end = endOfMonth(cursor);
 
   const { data: rows = [] } = useQuery({
-    queryKey: ["attendance-report", userId, format(cursor, "yyyy-MM")],
+    queryKey: ["attendance-report", employeeId, format(cursor, "yyyy-MM")],
     queryFn: async () => {
-      const { data } = await supabase.from("attendance").select("*")
-        .eq("employee_id", userId)
-        .gte("work_date", format(start, "yyyy-MM-dd"))
-        .lte("work_date", format(end, "yyyy-MM-dd"));
+      const data = await attendanceService.getMonth(employeeId, cursor.getMonth() + 1, cursor.getFullYear());
       return data ?? [];
     },
   });
@@ -252,13 +262,13 @@ function Reports({ userId }: { userId: string }) {
   const { dailyHours, pie } = useMemo(() => {
     const days = eachDayOfInterval({ start, end });
     const dailyHours = days.map((d) => {
-      const row = rows.find((r) => isSameDay(new Date(r.work_date), d));
+      const row = rows.find((r: any) => isSameDay(new Date(r.work_date), d));
       return { day: format(d, "d"), hours: Number(workedHours(row?.check_in, row?.check_out).toFixed(2)) };
     });
     const counts = { present: 0, absent: 0, late: 0, half_day: 0 };
     for (const d of days) {
       if (isWeekend(d) || d.getTime() > Date.now()) continue;
-      const row = rows.find((r) => isSameDay(new Date(r.work_date), d));
+      const row = rows.find((r: any) => isSameDay(new Date(r.work_date), d));
       const s = attendanceStatus(row);
       if (s === "pending") continue;
       counts[s as keyof typeof counts]++;
@@ -335,27 +345,31 @@ function TeamAttendance() {
   const { data: people = [] } = useQuery({
     queryKey: ["team-profiles"],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
-      return data ?? [];
+      const emps = await employeeService.getAll();
+      return (emps ?? []).map((e: any) => ({
+        id: e.id,
+        full_name: e.name,
+        email: e.email,
+      }));
     },
   });
 
   const { data: dayRows = [] } = useQuery({
     queryKey: ["team-attendance", date],
     queryFn: async () => {
-      const { data } = await supabase.from("attendance").select("*").eq("work_date", date);
+      const data = await attendanceService.getTeam(date);
       return data ?? [];
     },
   });
 
-  const merged = useMemo(() => people.map((p) => {
-    const row = dayRows.find((r) => r.employee_id === p.id);
+  const merged = useMemo(() => people.map((p: any) => {
+    const row = dayRows.find((r: any) => r.employee_id === p.id);
     return { ...p, row, status: attendanceStatus(row) };
   }), [people, dayRows]);
 
   const counts = useMemo(() => {
     const c: Record<AttendanceStatus, number> = { present: 0, absent: 0, late: 0, half_day: 0, pending: 0 };
-    merged.forEach((m) => { c[m.status]++; });
+    merged.forEach((m: any) => { c[m.status as AttendanceStatus]++; });
     return c;
   }, [merged]);
 
@@ -393,7 +407,7 @@ function TeamAttendance() {
             </TableHeader>
             <TableBody>
               {merged.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-8 text-sm text-muted-foreground">No employees found.</TableCell></TableRow>}
-              {merged.map((m) => {
+              {merged.map((m: any) => {
                 const h = workedHours(m.row?.check_in, m.row?.check_out);
                 return (
                   <TableRow key={m.id}>
@@ -404,7 +418,7 @@ function TeamAttendance() {
                     <TableCell className="text-sm">{m.row?.check_in ? format(new Date(m.row.check_in), "p") : "—"}</TableCell>
                     <TableCell className="text-sm">{m.row?.check_out ? format(new Date(m.row.check_out), "p") : "—"}</TableCell>
                     <TableCell className="text-sm font-mono">{h ? h.toFixed(2) : "—"}</TableCell>
-                    <TableCell><Badge variant="outline" className={statusColor[m.status]}>{statusLabel[m.status]}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className={statusColor[m.status as AttendanceStatus]}>{statusLabel[m.status as AttendanceStatus]}</Badge></TableCell>
                   </TableRow>
                 );
               })}

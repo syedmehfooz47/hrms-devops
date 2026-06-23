@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { leaveService } from "@/services/api";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,29 +31,43 @@ const LEAVE_TYPES = [
 ] as const;
 
 function LeavePage() {
-  const { user, roles } = useMe();
+  const { user, roles, employee } = useMe();
   const canApprove = isManagerOrAbove(roles);
   const year = new Date().getFullYear();
 
   const { data: balances = [] } = useQuery({
-    queryKey: ["my-balances", user?.id, year],
-    enabled: !!user?.id,
+    queryKey: ["my-balances", employee?.id, year],
+    enabled: !!employee?.id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("leave_balances")
-        .select("*")
-        .eq("employee_id", user!.id)
-        .eq("year", year);
-      return data ?? [];
+      const data = await leaveService.getBalances(employee!.id, year);
+      return (data ?? []).map((b: any) => {
+        let type = b.leave_type.toLowerCase();
+        if (type.includes("annual") || type.includes("earned")) type = "earned";
+        else if (type.includes("casual")) type = "casual";
+        else if (type.includes("sick")) type = "sick";
+        return {
+          ...b,
+          leave_type: type,
+        };
+      });
     },
   });
 
   const { data: mine = [] } = useQuery({
-    queryKey: ["my-leave", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["my-leave", employee?.id],
+    enabled: !!employee?.id,
     queryFn: async () => {
-      const { data } = await supabase.from("leave_requests").select("*").eq("employee_id", user!.id).order("created_at", { ascending: false });
-      return data ?? [];
+      const data = await leaveService.getMy();
+      return (data ?? []).map((lr: any) => {
+        let type = lr.leave_type.toLowerCase();
+        if (type.includes("annual") || type.includes("earned")) type = "earned";
+        else if (type.includes("casual")) type = "casual";
+        else if (type.includes("sick")) type = "sick";
+        return {
+          ...lr,
+          leave_type: type,
+        };
+      });
     },
   });
 
@@ -61,15 +75,25 @@ function LeavePage() {
     queryKey: ["all-leave"],
     enabled: canApprove,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("leave_requests")
-        .select("*, profiles!leave_requests_employee_id_fkey(full_name, email)")
-        .order("created_at", { ascending: false });
-      return data ?? [];
+      const data = await leaveService.getAll();
+      return (data ?? []).map((lr: any) => {
+        let type = lr.leave_type.toLowerCase();
+        if (type.includes("annual") || type.includes("earned")) type = "earned";
+        else if (type.includes("casual")) type = "casual";
+        else if (type.includes("sick")) type = "sick";
+        return {
+          ...lr,
+          leave_type: type,
+          profiles: {
+            full_name: lr.employee_name,
+            email: lr.email,
+          },
+        };
+      });
     },
   });
 
-  const pendingCount = useMemo(() => all.filter((r) => r.status === "pending").length, [all]);
+  const pendingCount = useMemo(() => all.filter((r: any) => r.status === "pending").length, [all]);
 
   return (
     <div className="space-y-5">
@@ -83,7 +107,7 @@ function LeavePage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {(["casual", "sick", "earned"] as const).map((t) => {
-          const b = balances.find((x) => x.leave_type === t);
+          const b = balances.find((x: any) => x.leave_type === t);
           const allocated = Number(b?.allocated ?? 0);
           const used = Number(b?.used ?? 0);
           const remaining = Math.max(0, allocated - used);
@@ -141,14 +165,12 @@ function LeaveTable({ rows, showEmployee }: { rows: any[]; showEmployee: boolean
   const [note, setNote] = useState("");
 
   const decide = useMutation({
-    mutationFn: async ({ id, status, approver_note }: { id: string; status: "approved" | "rejected"; approver_note?: string }) => {
-      const { error } = await supabase.from("leave_requests").update({
-        status,
-        approver_id: user?.id,
-        approver_note: approver_note || null,
-        decided_at: new Date().toISOString(),
-      }).eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ id, status, approver_note }: { id: string | number; status: "approved" | "rejected"; approver_note?: string }) => {
+      if (status === "approved") {
+        await leaveService.approve(id, user!.id, approver_note);
+      } else {
+        await leaveService.reject(id, user!.id, approver_note);
+      }
     },
     onSuccess: () => {
       toast.success("Decision recorded");
@@ -160,19 +182,18 @@ function LeaveTable({ rows, showEmployee }: { rows: any[]; showEmployee: boolean
       setDecideRow(null);
       setNote("");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   const cancel = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("leave_requests").delete().eq("id", id);
-      if (error) throw error;
+    mutationFn: async (id: string | number) => {
+      await leaveService.cancel(id);
     },
     onSuccess: () => {
       toast.success("Request cancelled");
       qc.invalidateQueries({ queryKey: ["my-leave"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   return (
@@ -266,7 +287,7 @@ function LeaveTable({ rows, showEmployee }: { rows: any[]; showEmployee: boolean
 }
 
 function NewLeaveDialog({ balances }: { balances: any[] }) {
-  const { user } = useMe();
+  const { user, employee } = useMe();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ leave_type: "casual", start_date: "", end_date: "", reason: "" });
@@ -278,18 +299,23 @@ function NewLeaveDialog({ balances }: { balances: any[] }) {
 
   const mut = useMutation({
     mutationFn: async () => {
-      if (!user) throw new Error("Not signed in");
+      if (!employee) throw new Error("No employee record");
       if (!form.start_date || !form.end_date) throw new Error("Pick dates");
       if (new Date(form.end_date) < new Date(form.start_date)) throw new Error("End date must be after start date");
       if (insufficient) throw new Error(`Insufficient balance — only ${remaining} days available`);
-      const { error } = await supabase.from("leave_requests").insert({
-        employee_id: user.id,
-        leave_type: form.leave_type as any,
+
+      let dbLeaveType = form.leave_type;
+      if (form.leave_type === "earned") dbLeaveType = "Annual Leave";
+      else if (form.leave_type === "casual") dbLeaveType = "Casual Leave";
+      else if (form.leave_type === "sick") dbLeaveType = "Sick Leave";
+
+      await leaveService.apply({
+        employee_id: employee.id,
+        leave_type: dbLeaveType,
         start_date: form.start_date,
         end_date: form.end_date,
-        reason: form.reason || null,
+        reason: form.reason || undefined,
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Leave request submitted");
@@ -299,7 +325,7 @@ function NewLeaveDialog({ balances }: { balances: any[] }) {
       setOpen(false);
       setForm({ leave_type: "casual", start_date: "", end_date: "", reason: "" });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   return (

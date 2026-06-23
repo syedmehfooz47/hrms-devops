@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { employeeService, departmentService, userService } from "@/services/api";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,39 +22,39 @@ export const Route = createFileRoute("/_authenticated/employees/$id")({
 function EmployeeDetailPage() {
   const { id } = Route.useParams();
   const { user, roles } = useMe();
-  const canManage = isHrOrAdmin(roles) || user?.id === id;
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["employee", id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("employees")
-        .select("*, profiles!inner(*), departments(name)")
-        .eq("id", id)
-        .maybeSingle();
-      return data;
+      return await employeeService.getById(id);
     },
   });
+
+  const canManage = isHrOrAdmin(roles) || (data && String(user?.id) === String(data.user_id));
 
   const [form, setForm] = useState<any>({});
   useEffect(() => { if (data) setForm(data); }, [data]);
 
   const { data: depts = [] } = useQuery({
     queryKey: ["departments-list"],
-    queryFn: async () => (await supabase.from("departments").select("id, name").order("name")).data ?? [],
+    queryFn: async () => {
+      const res = await departmentService.getAll();
+      return res ?? [];
+    },
   });
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      const { error: e1 } = await supabase.from("profiles").update({
-        full_name: form.profiles?.full_name,
-        phone: form.profiles?.phone,
-      }).eq("id", id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase.from("employees").update({
+      if (data.user_id) {
+        await userService.updateProfile(data.user_id, {
+          name: form.profiles?.full_name,
+          phone: form.profiles?.phone,
+        });
+      }
+      await employeeService.update(id, {
         designation: form.designation,
-        department_id: form.department_id || null,
+        department_id: form.department_id ? Number(form.department_id) : null,
         employment_type: form.employment_type,
         status: form.status,
         date_of_joining: form.date_of_joining,
@@ -63,16 +63,16 @@ function EmployeeDetailPage() {
         address: form.address,
         emergency_contact_name: form.emergency_contact_name,
         emergency_contact_phone: form.emergency_contact_phone,
-      }).eq("id", id);
-      if (e2) throw e2;
+      });
     },
     onSuccess: () => {
       toast.success("Saved");
       qc.invalidateQueries({ queryKey: ["employee", id] });
       qc.invalidateQueries({ queryKey: ["employees"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
+
 
   if (isLoading) return <div className="text-center py-12"><Loader2 className="h-5 w-5 animate-spin inline" /></div>;
   if (!data) return <div className="text-sm text-muted-foreground">Employee not found.</div>;
@@ -116,7 +116,7 @@ function EmployeeDetailPage() {
             <Field label="Department">
               <Select disabled={!canManage} value={form.department_id ?? ""} onValueChange={(v) => setForm({ ...form, department_id: v })}>
                 <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>{depts.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{depts.map((d: any) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
             <Field label="Employment type">

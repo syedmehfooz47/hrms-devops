@@ -1,7 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  employeeService,
+  departmentService,
+  attendanceService,
+  leaveService,
+  payrollService,
+  recruitmentService,
+  authService
+} from "@/services/api";
 import { useMe } from "@/hooks/use-me";
 import { isManagerOrAbove } from "@/lib/hrms";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +26,12 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
+  beforeLoad: async () => {
+    const user = authService.getCurrentUser();
+    if (!user || (user.role !== "admin" && user.role !== "hr_manager")) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   component: AnalyticsPage,
 });
 
@@ -36,58 +50,84 @@ function AnalyticsPage() {
   const employees = useQuery({
     queryKey: ["an-employees"],
     enabled: canView,
-    queryFn: async () => (await supabase.from("employees").select("id, status, department_id, employment_type, date_of_joining, salary_basic")).data ?? [],
+    queryFn: async () => {
+      const data = await employeeService.getAll();
+      return data ?? [];
+    },
   });
   const departments = useQuery({
     queryKey: ["an-departments"],
     enabled: canView,
-    queryFn: async () => (await supabase.from("departments").select("id, name")).data ?? [],
+    queryFn: async () => {
+      const data = await departmentService.getAll();
+      return data ?? [];
+    },
   });
   const attendance = useQuery({
     queryKey: ["an-attendance"],
     enabled: canView,
-    queryFn: async () => (await supabase.from("attendance").select("id, employee_id, work_date, check_in, check_out").order("work_date", { ascending: false }).limit(2000)).data ?? [],
+    queryFn: async () => {
+      const data = await attendanceService.getAll();
+      return data ?? [];
+    },
   });
   const leaves = useQuery({
     queryKey: ["an-leaves"],
     enabled: canView,
-    queryFn: async () => (await supabase.from("leave_requests").select("id, leave_type, status, start_date, end_date, employee_id").limit(2000)).data ?? [],
+    queryFn: async () => {
+      const data = await leaveService.getAll();
+      return data ?? [];
+    },
   });
   const payslips = useQuery({
     queryKey: ["an-payslips"],
     enabled: canView,
-    queryFn: async () => (await supabase.from("payslips").select("id, employee_id, year, month, gross, net, tax, pf").limit(2000)).data ?? [],
+    queryFn: async () => {
+      const data = await payrollService.getAll();
+      return (data ?? []).map((p: any) => ({
+        ...p,
+        net: p.net_salary !== undefined ? Number(p.net_salary) : Number(p.net || 0),
+        gross: p.basic_salary !== undefined ? Number(p.basic_salary) : Number(p.gross || 0),
+      }));
+    },
   });
   const jobs = useQuery({
     queryKey: ["an-jobs"],
     enabled: canView,
-    queryFn: async () => (await supabase.from("job_postings").select("id, status, title, created_at")).data ?? [],
+    queryFn: async () => {
+      const data = await recruitmentService.getJobs();
+      return data ?? [];
+    },
   });
   const candidates = useQuery({
     queryKey: ["an-candidates"],
     enabled: canView,
-    queryFn: async () => (await supabase.from("candidates").select("id, stage, job_id, applied_at")).data ?? [],
+    queryFn: async () => {
+      const data = await recruitmentService.getCandidates();
+      return data ?? [];
+    },
   });
+
 
   // KPIs
   const kpis = useMemo(() => {
     const emps = employees.data ?? [];
-    const active = emps.filter((e) => e.status === "active").length;
+    const active = emps.filter((e: any) => e.status === "active").length;
     const today = new Date().toISOString().slice(0, 10);
-    const presentToday = (attendance.data ?? []).filter((a) => a.work_date === today && a.check_in).length;
+    const presentToday = (attendance.data ?? []).filter((a: any) => a.work_date === today && a.check_in).length;
     const attendanceRate = active ? (presentToday / active) * 100 : 0;
-    const pendingLeaves = (leaves.data ?? []).filter((l) => l.status === "pending").length;
-    const openJobs = (jobs.data ?? []).filter((j) => j.status === "open").length;
+    const pendingLeaves = (leaves.data ?? []).filter((l: any) => l.status === "pending").length;
+    const openJobs = (jobs.data ?? []).filter((j: any) => j.status === "open").length;
     const lastMonth = MONTHS[(new Date().getMonth() + 11) % 12];
-    const last = (payslips.data ?? []).reduce((sum, p) => sum + Number(p.net ?? 0), 0);
+    const last = (payslips.data ?? []).reduce((sum: number, p: any) => sum + Number(p.net ?? 0), 0);
     return { headcount: emps.length, active, attendanceRate, pendingLeaves, openJobs, totalNetPaid: last, lastMonth };
   }, [employees.data, attendance.data, leaves.data, jobs.data, payslips.data]);
 
   // Department chart
   const deptChart = useMemo(() => {
-    const map = new Map((departments.data ?? []).map((d) => [d.id, d.name]));
+    const map = new Map((departments.data ?? []).map((d: any) => [d.id, d.name]));
     const counts: Record<string, number> = {};
-    (employees.data ?? []).forEach((e) => {
+    (employees.data ?? []).forEach((e: any) => {
       const name = (e.department_id && map.get(e.department_id)) || "Unassigned";
       counts[name] = (counts[name] ?? 0) + 1;
     });
@@ -97,14 +137,14 @@ function AnalyticsPage() {
   // Employment type
   const typeChart = useMemo(() => {
     const counts: Record<string, number> = {};
-    (employees.data ?? []).forEach((e) => { counts[e.employment_type] = (counts[e.employment_type] ?? 0) + 1; });
+    (employees.data ?? []).forEach((e: any) => { counts[e.employment_type] = (counts[e.employment_type] ?? 0) + 1; });
     return Object.entries(counts).map(([name, value]) => ({ name: name.replace("_", " "), value }));
   }, [employees.data]);
 
   // Hiring trend
   const hiringTrend = useMemo(() => {
     const map: Record<string, number> = {};
-    (employees.data ?? []).forEach((e) => {
+    (employees.data ?? []).forEach((e: any) => {
       if (!e.date_of_joining) return;
       const k = monthKey(e.date_of_joining);
       map[k] = (map[k] ?? 0) + 1;
@@ -118,9 +158,9 @@ function AnalyticsPage() {
     for (let i = 13; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
       const key = d.toISOString().slice(0, 10);
-      const rows = (attendance.data ?? []).filter((a) => a.work_date === key);
-      const present = rows.filter((r) => r.check_in).length;
-      const late = rows.filter((r) => {
+      const rows = (attendance.data ?? []).filter((a: any) => a.work_date === key);
+      const present = rows.filter((r: any) => r.check_in).length;
+      const late = rows.filter((r: any) => {
         if (!r.check_in) return false;
         const ci = new Date(r.check_in);
         const t = new Date(ci); t.setHours(9, 30, 0, 0);
@@ -134,20 +174,20 @@ function AnalyticsPage() {
   // Leave analytics
   const leaveByType = useMemo(() => {
     const counts: Record<string, number> = {};
-    (leaves.data ?? []).forEach((l) => { counts[l.leave_type] = (counts[l.leave_type] ?? 0) + 1; });
+    (leaves.data ?? []).forEach((l: any) => { counts[l.leave_type] = (counts[l.leave_type] ?? 0) + 1; });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [leaves.data]);
 
   const leaveByStatus = useMemo(() => {
     const counts: Record<string, number> = {};
-    (leaves.data ?? []).forEach((l) => { counts[l.status] = (counts[l.status] ?? 0) + 1; });
+    (leaves.data ?? []).forEach((l: any) => { counts[l.status] = (counts[l.status] ?? 0) + 1; });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [leaves.data]);
 
   // Payroll trend
   const payrollTrend = useMemo(() => {
     const map: Record<string, { gross: number; net: number; tax: number }> = {};
-    (payslips.data ?? []).forEach((p) => {
+    (payslips.data ?? []).forEach((p: any) => {
       const k = `${p.year}-${String(p.month).padStart(2, "0")}`;
       if (!map[k]) map[k] = { gross: 0, net: 0, tax: 0 };
       map[k].gross += Number(p.gross ?? 0);
@@ -161,7 +201,7 @@ function AnalyticsPage() {
   const funnel = useMemo(() => {
     const stages = ["applied", "screening", "interview", "offer", "hired", "rejected"];
     const counts: Record<string, number> = {};
-    (candidates.data ?? []).forEach((c) => { counts[c.stage] = (counts[c.stage] ?? 0) + 1; });
+    (candidates.data ?? []).forEach((c: any) => { counts[c.stage] = (counts[c.stage] ?? 0) + 1; });
     return stages.map((s) => ({ stage: s, count: counts[s] ?? 0 }));
   }, [candidates.data]);
 

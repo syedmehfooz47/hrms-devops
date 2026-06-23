@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { performanceService, employeeService } from "@/services/api";
 import { useMe } from "@/hooks/use-me";
 import { isManagerOrAbove } from "@/lib/hrms";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -24,12 +24,12 @@ export const Route = createFileRoute("/_authenticated/performance")({
 });
 
 type Goal = {
-  id: string; employee_id: string; title: string; description: string | null;
+  id: string | number; employee_id: string | number; title: string; description: string | null;
   category: string | null; target_date: string | null; progress: number;
   status: "not_started" | "in_progress" | "completed" | "cancelled"; created_at: string;
 };
 type Review = {
-  id: string; employee_id: string; reviewer_id: string; period_label: string;
+  id: string | number; employee_id: string | number; reviewer_id: string | number; period_label: string;
   period_start: string | null; period_end: string | null; rating: number;
   strengths: string | null; improvements: string | null; feedback: string | null;
   status: "draft" | "submitted" | "acknowledged"; created_at: string;
@@ -54,32 +54,24 @@ function Stars({ value }: { value: number }) {
 }
 
 function PerformancePage() {
-  const { user, roles } = useMe();
+  const { user, roles, employee } = useMe();
   const isManager = isManagerOrAbove(roles);
   const qc = useQueryClient();
 
   const myGoals = useQuery({
-    queryKey: ["perf-goals", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["perf-goals", employee?.id],
+    enabled: !!employee?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("performance_goals").select("*")
-        .eq("employee_id", user!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
+      const data = await performanceService.getMyGoals(employee!.id);
       return data as Goal[];
     },
   });
 
   const myReviews = useQuery({
-    queryKey: ["perf-reviews", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["perf-reviews", employee?.id],
+    enabled: !!employee?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("performance_reviews").select("*")
-        .eq("employee_id", user!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
+      const data = await performanceService.getMyReviews(employee!.id);
       return data as Review[];
     },
   });
@@ -88,10 +80,7 @@ function PerformancePage() {
     queryKey: ["perf-team-reviews"],
     enabled: !!user?.id && isManager,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("performance_reviews").select("*")
-        .order("created_at", { ascending: false }).limit(200);
-      if (error) throw error;
+      const data = await performanceService.getTeamReviews();
       return data as Review[];
     },
   });
@@ -100,9 +89,12 @@ function PerformancePage() {
     queryKey: ["perf-employees"],
     enabled: !!user?.id && isManager,
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
-      if (error) throw error;
-      return data as { id: string; full_name: string; email: string }[];
+      const emps = await employeeService.getAll();
+      return (emps ?? []).map((e: any) => ({
+        id: e.id,
+        full_name: e.name,
+        email: e.email,
+      }));
     },
   });
 
@@ -146,7 +138,7 @@ function PerformancePage() {
 
         <TabsContent value="goals" className="space-y-4">
           <div className="flex justify-end">
-            <NewGoalDialog onCreated={() => qc.invalidateQueries({ queryKey: ["perf-goals"] })} userId={user?.id} />
+            <NewGoalDialog onCreated={() => qc.invalidateQueries({ queryKey: ["perf-goals"] })} employeeId={employee?.id} userId={user?.id} />
           </div>
           <div className="grid gap-3">
             {(myGoals.data ?? []).map((g) => (
@@ -212,10 +204,10 @@ function PerformancePage() {
                   </TableHeader>
                   <TableBody>
                     {(teamReviews.data ?? []).map((r) => {
-                      const emp = (employees.data ?? []).find((e) => e.id === r.employee_id);
+                      const emp = (employees.data ?? []).find((e: any) => e.id === r.employee_id);
                       return (
                         <TableRow key={r.id}>
-                          <TableCell>{emp?.full_name ?? r.employee_id.slice(0, 8)}</TableCell>
+                          <TableCell>{emp?.full_name ?? String(r.employee_id).slice(0, 8)}</TableCell>
                           <TableCell>{r.period_label}</TableCell>
                           <TableCell><Stars value={Number(r.rating)} /></TableCell>
                           <TableCell><Badge variant="outline">{r.status}</Badge></TableCell>
@@ -242,12 +234,10 @@ function GoalCard({ goal, onChange }: { goal: Goal; onChange: () => void }) {
   const [status, setStatus] = useState<Goal["status"]>(goal.status);
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("performance_goals")
-        .update({ progress, status }).eq("id", goal.id);
-      if (error) throw error;
+      await performanceService.updateGoal(goal.id, { progress, status });
     },
     onSuccess: () => { toast.success("Goal updated"); onChange(); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
   return (
     <Card>
@@ -308,24 +298,27 @@ function ReviewCard({ review }: { review: Review }) {
   );
 }
 
-function NewGoalDialog({ onCreated, userId }: { onCreated: () => void; userId?: string }) {
+function NewGoalDialog({ onCreated, employeeId, userId }: { onCreated: () => void; employeeId?: string | number; userId?: string | number }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", category: "", target_date: "" });
   const create = useMutation({
     mutationFn: async () => {
-      if (!userId) throw new Error("Not signed in");
-      const { error } = await supabase.from("performance_goals").insert({
-        employee_id: userId, title: form.title, description: form.description || null,
-        category: form.category || null, target_date: form.target_date || null, created_by: userId,
+      if (!employeeId || !userId) throw new Error("Not signed in");
+      await performanceService.createGoal({
+        employee_id: employeeId,
+        title: form.title,
+        description: form.description || null,
+        category: form.category || null,
+        target_date: form.target_date || null,
+        created_by: userId,
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Goal created"); setOpen(false);
       setForm({ title: "", description: "", category: "", target_date: "" });
       onCreated();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -349,8 +342,8 @@ function NewGoalDialog({ onCreated, userId }: { onCreated: () => void; userId?: 
 }
 
 function NewReviewDialog({ reviewerId, employees, onCreated }: {
-  reviewerId?: string;
-  employees: { id: string; full_name: string }[];
+  reviewerId?: string | number;
+  employees: { id: string | number; full_name: string }[];
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -362,16 +355,19 @@ function NewReviewDialog({ reviewerId, employees, onCreated }: {
     mutationFn: async () => {
       if (!reviewerId) throw new Error("Not signed in");
       if (!form.employee_id) throw new Error("Select an employee");
-      const { error } = await supabase.from("performance_reviews").insert({
-        employee_id: form.employee_id, reviewer_id: reviewerId,
-        period_label: form.period_label, rating: form.rating,
-        strengths: form.strengths || null, improvements: form.improvements || null,
-        feedback: form.feedback || null, status: "submitted",
+      await performanceService.createReview({
+        employee_id: Number(form.employee_id),
+        reviewer_id: Number(reviewerId),
+        period_label: form.period_label,
+        rating: form.rating,
+        strengths: form.strengths || null,
+        improvements: form.improvements || null,
+        feedback: form.feedback || null,
+        status: "submitted",
       });
-      if (error) throw error;
     },
     onSuccess: () => { toast.success("Review submitted"); setOpen(false); onCreated(); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -384,7 +380,7 @@ function NewReviewDialog({ reviewerId, employees, onCreated }: {
             <Select value={form.employee_id} onValueChange={(v) => setForm({ ...form, employee_id: v })}>
               <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
               <SelectContent>
-                {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                {employees.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.full_name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

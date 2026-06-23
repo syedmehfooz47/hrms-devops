@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { recruitmentService, employeeService, userService, authService } from "@/services/api";
 import { useMe } from "@/hooks/use-me";
 import { isHrOrAdmin, isManagerOrAbove } from "@/lib/hrms";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,39 +11,48 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Briefcase, Plus, Users, CalendarClock, ClipboardList } from "lucide-react";
+import { Briefcase, Plus, Users, CalendarClock, ClipboardList, Sparkles, FileDown, BrainCircuit, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/recruitment")({
+  beforeLoad: async () => {
+    const user = authService.getCurrentUser();
+    if (!user || (user.role !== "admin" && user.role !== "hr_manager" && user.role !== "dept_manager")) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   component: RecruitmentPage,
 });
 
 type Job = {
-  id: string; title: string; department_id: string | null; location: string | null;
+  id: string | number; title: string; department_id: string | number | null; location: string | null;
   employment_type: "full_time" | "part_time" | "contract" | "intern";
   description: string | null; requirements: string | null;
   salary_min: number | null; salary_max: number | null;
   status: "open" | "closed" | "draft"; created_at: string;
 };
 type Candidate = {
-  id: string; job_id: string; full_name: string; email: string; phone: string | null;
+  id: string | number; job_id: string | number; full_name: string; email: string; phone: string | null;
   resume_url: string | null; source: string | null; notes: string | null;
   stage: "applied" | "screening" | "interview" | "offer" | "hired" | "rejected";
   applied_at: string;
+  ai_score?: number | null;
+  ai_analysis?: string | null;
+  ai_status?: "pending" | "running" | "success" | "failed" | null;
 };
 type Interview = {
-  id: string; candidate_id: string; interviewer_id: string | null;
+  id: string | number; candidate_id: string | number; interviewer_id: string | number | null;
   scheduled_at: string; duration_minutes: number; mode: string | null;
   location: string | null; round: string | null;
   status: "scheduled" | "completed" | "cancelled" | "no_show";
   feedback: string | null; rating: number | null;
 };
 type OnboardingTask = {
-  id: string; employee_id: string; title: string; description: string | null;
+  id: string | number; employee_id: string | number; title: string; description: string | null;
   category: string | null; due_date: string | null;
   status: "pending" | "in_progress" | "done"; position: number;
 };
@@ -59,16 +68,29 @@ const stageColor: Record<Candidate["stage"], string> = {
 };
 
 function RecruitmentPage() {
-  const { user, roles } = useMe();
+  const { user, roles, employee } = useMe();
   const isHR = isHrOrAdmin(roles);
   const isMgr = isManagerOrAbove(roles);
   const qc = useQueryClient();
 
+  const screenMutation = useMutation({
+    mutationFn: async (candidateId: string | number) => {
+      await recruitmentService.triggerScreening(candidateId);
+    },
+    onSuccess: () => {
+      toast.success("AI Resume screening completed!");
+      qc.invalidateQueries({ queryKey: ["candidates"] });
+    },
+    onError: (e: any) => {
+      toast.error(e.response?.data?.message || e.message);
+      qc.invalidateQueries({ queryKey: ["candidates"] });
+    },
+  });
+
   const jobs = useQuery({
     queryKey: ["jobs"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("job_postings").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
+      const data = await recruitmentService.getJobs();
       return data as Job[];
     },
   });
@@ -77,8 +99,7 @@ function RecruitmentPage() {
     queryKey: ["candidates"],
     enabled: isMgr,
     queryFn: async () => {
-      const { data, error } = await supabase.from("candidates").select("*").order("applied_at", { ascending: false });
-      if (error) throw error;
+      const data = await recruitmentService.getCandidates();
       return data as Candidate[];
     },
   });
@@ -87,21 +108,26 @@ function RecruitmentPage() {
     queryKey: ["interviews"],
     enabled: isMgr,
     queryFn: async () => {
-      const { data, error } = await supabase.from("interviews").select("*").order("scheduled_at", { ascending: true });
-      if (error) throw error;
+      const data = await recruitmentService.getInterviews();
       return data as Interview[];
     },
   });
 
   const myOnboarding = useQuery({
-    queryKey: ["onboarding", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["onboarding", employee?.id],
+    enabled: !!employee?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("onboarding_tasks").select("*")
-        .eq("employee_id", user!.id).order("position");
-      if (error) throw error;
+      const data = await recruitmentService.getOnboarding(employee!.id);
       return data as OnboardingTask[];
+    },
+  });
+
+  const profiles = useQuery({
+    queryKey: ["recr-profiles"],
+    enabled: isHR,
+    queryFn: async () => {
+      const data = await userService.getProfiles();
+      return data as { id: string | number; full_name: string }[];
     },
   });
 
@@ -109,9 +135,11 @@ function RecruitmentPage() {
     queryKey: ["recr-employees"],
     enabled: isHR,
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("id, full_name").order("full_name");
-      if (error) throw error;
-      return data as { id: string; full_name: string }[];
+      const emps = await employeeService.getAll();
+      return (emps ?? []).map((e: any) => ({
+        id: e.id,
+        full_name: e.name,
+      }));
     },
   });
 
@@ -133,7 +161,7 @@ function RecruitmentPage() {
         <TabsContent value="jobs" className="space-y-4">
           {isHR && (
             <div className="flex justify-end">
-              <NewJobDialog userId={user?.id} onCreated={() => qc.invalidateQueries({ queryKey: ["jobs"] })} />
+              <NewJobDialog onCreated={() => qc.invalidateQueries({ queryKey: ["jobs"] })} />
             </div>
           )}
           <div className="grid md:grid-cols-2 gap-3">
@@ -163,9 +191,13 @@ function RecruitmentPage() {
                       <Select
                         value={j.status}
                         onValueChange={async (v) => {
-                          const { error } = await supabase.from("job_postings").update({ status: v as "draft" | "open" | "closed" }).eq("id", j.id);
-                          if (error) toast.error(error.message);
-                          else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["jobs"] }); }
+                          try {
+                            await recruitmentService.updateJobStatus(j.id, v);
+                            toast.success("Updated");
+                            qc.invalidateQueries({ queryKey: ["jobs"] });
+                          } catch (err: any) {
+                            toast.error(err.response?.data?.message || err.message);
+                          }
                         }}
                       >
                         <SelectTrigger className="w-32 h-8"><SelectValue /></SelectTrigger>
@@ -197,15 +229,34 @@ function RecruitmentPage() {
                     </CardHeader>
                     <CardContent className="space-y-2 max-h-80 overflow-y-auto">
                       {list.map((c) => (
-                        <div key={c.id} className="border rounded-md p-2 text-xs space-y-1">
-                          <div className="font-medium">{c.full_name}</div>
+                        <div key={c.id} className="border rounded-md p-2 text-xs space-y-1 bg-card relative">
+                          <div className="font-medium flex items-center justify-between gap-1">
+                            <span className="truncate">{c.full_name}</span>
+                            {c.ai_status === "success" && typeof c.ai_score === "number" && (
+                              <Badge className="text-[9px] px-1 h-4 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 shrink-0">
+                                {c.ai_score}% Match
+                              </Badge>
+                            )}
+                            {c.ai_status === "running" && (
+                              <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
+                            )}
+                            {c.ai_status === "failed" && (
+                              <Badge variant="destructive" className="text-[9px] px-1 h-4 shrink-0">
+                                AI Fail
+                              </Badge>
+                            )}
+                          </div>
                           <div className="text-muted-foreground truncate">{c.email}</div>
                           <Select
                             value={c.stage}
                             onValueChange={async (v) => {
-                              const { error } = await supabase.from("candidates").update({ stage: v as "applied" | "screening" | "interview" | "offer" | "hired" | "rejected" }).eq("id", c.id);
-                              if (error) toast.error(error.message);
-                              else { toast.success("Moved"); qc.invalidateQueries({ queryKey: ["candidates"] }); }
+                              try {
+                                await recruitmentService.updateCandidateStage(c.id, v);
+                                toast.success("Moved");
+                                qc.invalidateQueries({ queryKey: ["candidates"] });
+                              } catch (err: any) {
+                                toast.error(err.response?.data?.message || err.message);
+                              }
                             }}
                           >
                             <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
@@ -213,10 +264,31 @@ function RecruitmentPage() {
                               {stages.map((st) => <SelectItem key={st} value={st} className="capitalize">{st}</SelectItem>)}
                             </SelectContent>
                           </Select>
+
+                          {/* AI Action button / report */}
+                          {c.ai_status === "success" ? (
+                            <AIReportDialog candidate={c} />
+                          ) : c.ai_status === "running" ? (
+                            <Button disabled size="sm" variant="secondary" className="w-full text-[10px] mt-1 h-7 flex items-center justify-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" /> Screening...
+                            </Button>
+                          ) : (
+                            <Button 
+                              onClick={() => screenMutation.mutate(c.id)} 
+                              disabled={screenMutation.isPending && screenMutation.variables === c.id}
+                              size="sm" 
+                              variant="outline" 
+                              className="w-full text-[10px] mt-1 h-7 flex items-center justify-center gap-1 border-dashed hover:bg-accent"
+                            >
+                              <BrainCircuit className="h-3.5 w-3.5 text-muted-foreground" />
+                              {c.ai_status === "failed" ? "Retry AI Screen" : "AI Screen Resume"}
+                            </Button>
+                          )}
+
                           {isHR && (
                             <ScheduleInterviewDialog
                               candidateId={c.id}
-                              employees={employees.data ?? []}
+                              employees={profiles.data ?? []}
                               onCreated={() => qc.invalidateQueries({ queryKey: ["interviews"] })}
                             />
                           )}
@@ -259,9 +331,13 @@ function RecruitmentPage() {
                             <Select
                               value={i.status}
                               onValueChange={async (v) => {
-                                const { error } = await supabase.from("interviews").update({ status: v as "scheduled" | "completed" | "cancelled" | "no_show" }).eq("id", i.id);
-                                if (error) toast.error(error.message);
-                                else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["interviews"] }); }
+                                try {
+                                  await recruitmentService.updateInterviewStatus(i.id, v);
+                                  toast.success("Updated");
+                                  qc.invalidateQueries({ queryKey: ["interviews"] });
+                                } catch (err: any) {
+                                  toast.error(err.response?.data?.message || err.message);
+                                }
                               }}
                             >
                               <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
@@ -307,9 +383,12 @@ function RecruitmentPage() {
                     checked={t.status === "done"}
                     onCheckedChange={async (checked) => {
                       const status = checked ? "done" : "pending";
-                      const { error } = await supabase.from("onboarding_tasks").update({ status }).eq("id", t.id);
-                      if (error) toast.error(error.message);
-                      else qc.invalidateQueries({ queryKey: ["onboarding"] });
+                      try {
+                        await recruitmentService.updateTaskStatus(t.id, status);
+                        qc.invalidateQueries({ queryKey: ["onboarding"] });
+                      } catch (err: any) {
+                        toast.error(err.response?.data?.message || err.message);
+                      }
                     }}
                   />
                   <div className="flex-1">
@@ -334,23 +413,22 @@ function RecruitmentPage() {
   );
 }
 
-function NewJobDialog({ userId, onCreated }: { userId?: string; onCreated: () => void }) {
+function NewJobDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ title: "", location: "", employment_type: "full_time", description: "", requirements: "", salary_min: "", salary_max: "" });
   const create = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("job_postings").insert({
+      await recruitmentService.createJob({
         title: f.title, location: f.location || null,
         employment_type: f.employment_type as Job["employment_type"],
         description: f.description || null, requirements: f.requirements || null,
         salary_min: f.salary_min ? Number(f.salary_min) : null,
         salary_max: f.salary_max ? Number(f.salary_max) : null,
-        status: "open", posted_by: userId ?? null,
+        status: "open",
       });
-      if (error) throw error;
     },
     onSuccess: () => { toast.success("Job posted"); setOpen(false); onCreated(); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -387,20 +465,48 @@ function NewJobDialog({ userId, onCreated }: { userId?: string; onCreated: () =>
   );
 }
 
-function AddCandidateDialog({ jobId, onCreated }: { jobId: string; onCreated: () => void }) {
+function AddCandidateDialog({ jobId, onCreated }: { jobId: string | number; onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ full_name: "", email: "", phone: "", source: "", notes: "" });
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+
   const create = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("candidates").insert({
-        job_id: jobId, full_name: f.full_name, email: f.email,
-        phone: f.phone || null, source: f.source || null, notes: f.notes || null,
+      setLoading(true);
+      const newCand = await recruitmentService.addCandidate({
+        job_id: jobId, 
+        full_name: f.full_name, 
+        email: f.email,
+        phone: f.phone || null, 
+        source: f.source || null, 
+        notes: f.notes || null,
       });
-      if (error) throw error;
+
+      if (file) {
+        try {
+          await recruitmentService.uploadResume(newCand.id, file);
+          await recruitmentService.triggerScreening(newCand.id);
+        } catch (uploadErr) {
+          console.error("Resume upload/screen failed:", uploadErr);
+          toast.error("Candidate added, but resume upload/screening failed");
+        }
+      }
     },
-    onSuccess: () => { toast.success("Candidate added"); setOpen(false); setF({ full_name: "", email: "", phone: "", source: "", notes: "" }); onCreated(); },
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: () => { 
+      toast.success("Candidate added successfully"); 
+      setOpen(false); 
+      setF({ full_name: "", email: "", phone: "", source: "", notes: "" }); 
+      setFile(null);
+      setLoading(false);
+      onCreated(); 
+    },
+    onError: (e: any) => {
+      toast.error(e.response?.data?.message || e.message);
+      setLoading(false);
+    },
   });
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button size="sm" variant="outline"><Users className="h-4 w-4 mr-1" /> Candidate</Button></DialogTrigger>
@@ -414,16 +520,33 @@ function AddCandidateDialog({ jobId, onCreated }: { jobId: string; onCreated: ()
           </div>
           <div><Label>Source</Label><Input value={f.source} onChange={(e) => setF({ ...f, source: e.target.value })} placeholder="LinkedIn, referral…" /></div>
           <div><Label>Notes</Label><Textarea value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></div>
+          <div>
+            <Label>Resume (PDF or TXT)</Label>
+            <Input 
+              type="file" 
+              accept=".pdf,.txt" 
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                  setFile(files[0]);
+                }
+              }} 
+            />
+          </div>
         </div>
-        <DialogFooter><Button onClick={() => create.mutate()} disabled={!f.full_name || !f.email || create.isPending}>Add</Button></DialogFooter>
+        <DialogFooter>
+          <Button onClick={() => create.mutate()} disabled={!f.full_name || !f.email || create.isPending || loading}>
+            {loading ? "Adding..." : "Add"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
 function ScheduleInterviewDialog({ candidateId, employees, onCreated }: {
-  candidateId: string;
-  employees: { id: string; full_name: string }[];
+  candidateId: string | number;
+  employees: { id: string | number; full_name: string }[];
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -431,17 +554,16 @@ function ScheduleInterviewDialog({ candidateId, employees, onCreated }: {
   const create = useMutation({
     mutationFn: async () => {
       if (!f.scheduled_at) throw new Error("Pick a date/time");
-      const { error } = await supabase.from("interviews").insert({
+      await recruitmentService.scheduleInterview({
         candidate_id: candidateId,
         scheduled_at: new Date(f.scheduled_at).toISOString(),
         duration_minutes: f.duration_minutes,
         mode: f.mode, round: f.round,
-        interviewer_id: f.interviewer_id || null,
+        interviewer_id: f.interviewer_id ? Number(f.interviewer_id) : null,
       });
-      if (error) throw error;
     },
     onSuccess: () => { toast.success("Interview scheduled"); setOpen(false); onCreated(); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -470,7 +592,7 @@ function ScheduleInterviewDialog({ candidateId, employees, onCreated }: {
             <Select value={f.interviewer_id} onValueChange={(v) => setF({ ...f, interviewer_id: v })}>
               <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
               <SelectContent>
-                {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                {employees.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.full_name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -492,7 +614,7 @@ const DEFAULT_ONBOARDING = [
 ];
 
 function NewOnboardingDialog({ employees, onCreated }: {
-  employees: { id: string; full_name: string }[];
+  employees: { id: string | number; full_name: string }[];
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -503,14 +625,14 @@ function NewOnboardingDialog({ employees, onCreated }: {
     mutationFn: async () => {
       if (!employeeId) throw new Error("Select employee");
       const rows = useDefaults
-        ? DEFAULT_ONBOARDING.map((t, i) => ({ employee_id: employeeId, title: t.title, category: t.category, position: i }))
-        : [{ employee_id: employeeId, title: customTitle, position: 0 }];
+        ? DEFAULT_ONBOARDING.map((t, i) => ({ employee_id: Number(employeeId), title: t.title, category: t.category, position: i }))
+        : [{ employee_id: Number(employeeId), title: customTitle, position: 0 }];
       if (!useDefaults && !customTitle) throw new Error("Enter a task title");
-      const { error } = await supabase.from("onboarding_tasks").insert(rows);
-      if (error) throw error;
+      
+      await Promise.all(rows.map(row => recruitmentService.assignOnboarding(row)));
     },
     onSuccess: () => { toast.success("Onboarding created"); setOpen(false); onCreated(); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -523,7 +645,7 @@ function NewOnboardingDialog({ employees, onCreated }: {
             <Select value={employeeId} onValueChange={setEmployeeId}>
               <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
               <SelectContent>
-                {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                {employees.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.full_name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -536,6 +658,151 @@ function NewOnboardingDialog({ employees, onCreated }: {
           )}
         </div>
         <DialogFooter><Button onClick={() => create.mutate()} disabled={create.isPending}>Assign</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AIReportDialog({ candidate }: { candidate: Candidate }) {
+  const [open, setOpen] = useState(false);
+  
+  const report = useMemo(() => {
+    if (!candidate.ai_analysis) return null;
+    try {
+      return typeof candidate.ai_analysis === "string" 
+        ? JSON.parse(candidate.ai_analysis) 
+        : candidate.ai_analysis;
+    } catch (e) {
+      console.error("Failed to parse AI analysis:", e);
+      return null;
+    }
+  }, [candidate.ai_analysis]);
+
+  if (!report) return null;
+
+  const recColor = {
+    Shortlist: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+    Interview: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
+    Hold: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+    Reject: "bg-destructive/15 text-destructive border-destructive/30",
+  }[report.recommendation as string] || "bg-muted text-muted-foreground";
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="w-full text-[10px] mt-1 h-7 flex items-center justify-center gap-1 border-primary/30 text-primary hover:bg-primary/5">
+          <Sparkles className="h-3 w-3" /> View AI Report
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-xl md:max-w-2xl bg-card border border-border">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+            <Sparkles className="h-5 w-5 text-primary animate-pulse" /> AI Resume Match Report
+          </DialogTitle>
+          <DialogDescription>
+            AI-generated compatibility report for <strong>{candidate.full_name}</strong>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-4 border rounded-lg p-4 bg-muted/20">
+            <div className="flex flex-col items-center justify-center border-r pr-4">
+              <div className="relative flex items-center justify-center">
+                <svg className="w-20 h-20 transform -rotate-90">
+                  <circle cx="40" cy="40" r="34" className="stroke-muted" strokeWidth="6" fill="transparent" />
+                  <circle 
+                    cx="40" 
+                    cy="40" 
+                    r="34" 
+                    className="stroke-primary" 
+                    strokeWidth="6" 
+                    fill="transparent"
+                    strokeDasharray={2 * Math.PI * 34}
+                    strokeDashoffset={2 * Math.PI * 34 * (1 - report.score / 100)}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute text-xl font-bold">{report.score}%</span>
+              </div>
+              <span className="text-xs text-muted-foreground mt-2 font-medium">Compatibility Score</span>
+            </div>
+
+            <div className="flex flex-col justify-center pl-2">
+              <span className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">AI Recommendation</span>
+              <div className="mt-1">
+                <Badge className={`text-xs px-3 py-1 font-semibold ${recColor}`} variant="outline">
+                  {report.recommendation}
+                </Badge>
+              </div>
+              {candidate.resume_url && (
+                <a 
+                  href={`http://localhost:5000${candidate.resume_url}`} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="text-xs text-primary hover:underline flex items-center gap-1 mt-3 font-medium"
+                >
+                  <FileDown className="h-3.5 w-3.5" /> View Original Resume
+                </a>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Experience Summary</h4>
+            <p className="text-sm bg-muted/10 p-3 rounded-md border text-foreground leading-relaxed">
+              {report.experience_summary}
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Matching Skills ({report.matching_skills?.length || 0})
+              </h4>
+              <div className="flex flex-wrap gap-1.5 border rounded-md p-3 min-h-[80px] bg-emerald-500/[0.02]">
+                {report.matching_skills?.map((s: string) => (
+                  <Badge key={s} variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 text-xs">
+                    {s}
+                  </Badge>
+                ))}
+                {(!report.matching_skills || report.matching_skills.length === 0) && (
+                  <span className="text-xs text-muted-foreground">No explicit skills matches found.</span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-amber-500" /> Missing Stack/Skills ({report.missing_skills?.length || 0})
+              </h4>
+              <div className="flex flex-wrap gap-1.5 border rounded-md p-3 min-h-[80px] bg-amber-500/[0.02]">
+                {report.missing_skills?.map((s: string) => (
+                  <Badge key={s} variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 text-xs">
+                    {s}
+                  </Badge>
+                ))}
+                {(!report.missing_skills || report.missing_skills.length === 0) && (
+                  <span className="text-xs text-muted-foreground">Matches all key requirements!</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">AI Reasoning</h4>
+            <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1.5">
+              {report.reasoning?.map((r: string, idx: number) => (
+                <li key={idx} className="leading-relaxed text-foreground/80">{r}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button onClick={() => setOpen(false)} variant="secondary" size="sm">
+            Close Report
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

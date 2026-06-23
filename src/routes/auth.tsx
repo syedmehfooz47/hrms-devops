@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { authService } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,27 +24,29 @@ function AuthPage() {
   const onLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Welcome back");
-    navigate({ to: "/dashboard", replace: true });
+    try {
+      await authService.login(email, password);
+      setLoading(false);
+      window.dispatchEvent(new CustomEvent("auth-state-change"));
+      toast.success("Welcome back");
+      navigate({ to: "/dashboard", replace: true });
+    } catch (err: any) {
+      setLoading(false);
+      toast.error(err.response?.data?.message || err.message);
+    }
   };
 
   const onSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-        data: { full_name: fullName },
-      },
-    });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Account created. Check your email to confirm, then sign in.");
+    try {
+      await authService.register(fullName, email, password);
+      setLoading(false);
+      toast.success("Account created successfully. You can now sign in!");
+    } catch (err: any) {
+      setLoading(false);
+      toast.error(err.response?.data?.message || err.message);
+    }
   };
 
   return (

@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { departmentService, employeeService, authService } from "@/services/api";
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,12 @@ import { useMe } from "@/hooks/use-me";
 import { isHrOrAdmin } from "@/lib/hrms";
 
 export const Route = createFileRoute("/_authenticated/departments")({
+  beforeLoad: async () => {
+    const user = authService.getCurrentUser();
+    if (!user || (user.role !== "admin" && user.role !== "hr_manager")) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   component: DepartmentsPage,
 });
 
@@ -25,22 +31,21 @@ function DepartmentsPage() {
   const { data: rows = [] } = useQuery({
     queryKey: ["departments-page"],
     queryFn: async () => {
-      const { data: depts } = await supabase.from("departments").select("*").order("name");
-      const { data: emps } = await supabase.from("employees").select("department_id");
-      return (depts ?? []).map((d) => ({
+      const depts = await departmentService.getAll();
+      const emps = await employeeService.getAll();
+      return (depts ?? []).map((d: any) => ({
         ...d,
-        headcount: emps?.filter((e) => e.department_id === d.id).length ?? 0,
+        headcount: emps?.filter((e: any) => e.department_id === d.id).length ?? 0,
       }));
     },
   });
 
   const delMut = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("departments").delete().eq("id", id);
-      if (error) throw error;
+    mutationFn: async (id: string | number) => {
+      await departmentService.delete(id);
     },
     onSuccess: () => { toast.success("Deleted"); qc.invalidateQueries({ queryKey: ["departments-page"] }); qc.invalidateQueries({ queryKey: ["dept-breakdown"] }); },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   return (
@@ -57,14 +62,14 @@ function DepartmentsPage() {
         {rows.length === 0 && (
           <Card className="col-span-full"><CardContent className="py-10 text-center text-sm text-muted-foreground">No departments yet.</CardContent></Card>
         )}
-        {rows.map((d) => (
+        {rows.map((d: any) => (
           <Card key={d.id} className="group">
             <CardContent className="p-5">
               <div className="flex items-start justify-between">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center"><Building2 className="h-5 w-5" /></div>
                 {canManage && (
                   <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition" onClick={() => { if (confirm(`Delete ${d.name}?`)) delMut.mutate(d.id); }}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 )}
               </div>
@@ -88,8 +93,7 @@ function NewDeptDialog() {
   const mut = useMutation({
     mutationFn: async () => {
       if (!name.trim()) throw new Error("Name required");
-      const { error } = await supabase.from("departments").insert({ name: name.trim(), description: description || null });
-      if (error) throw error;
+      await departmentService.create({ name: name.trim(), description: description || undefined });
     },
     onSuccess: () => {
       toast.success("Department created");
@@ -99,7 +103,7 @@ function NewDeptDialog() {
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       setOpen(false); setName(""); setDescription("");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   return (
@@ -119,3 +123,4 @@ function NewDeptDialog() {
     </Dialog>
   );
 }
+

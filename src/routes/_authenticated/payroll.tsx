@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { payrollService } from "@/services/api";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Wallet, Plus, Loader2, Download, FileText, CheckCircle2, Calendar } fro
 import { toast } from "sonner";
 import { useMe } from "@/hooks/use-me";
 import { isHrOrAdmin } from "@/lib/hrms";
-import { computeSalary, monthName, downloadPayslipPDF } from "@/lib/payroll";
+import { monthName, downloadPayslipPDF } from "@/lib/payroll";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export const Route = createFileRoute("/_authenticated/payroll")({
@@ -24,58 +24,64 @@ const inr = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 
 function PayrollPage() {
-  const { user, roles } = useMe();
+  const { user, roles, employee } = useMe();
   const isHr = isHrOrAdmin(roles);
-
-  const { data: runs = [] } = useQuery({
-    queryKey: ["payroll-runs"],
-    enabled: isHr,
-    queryFn: async () => {
-      const { data } = await supabase.from("payroll_runs").select("*").order("year", { ascending: false }).order("month", { ascending: false });
-      return data ?? [];
-    },
-  });
-
-  const { data: mySlips = [] } = useQuery({
-    queryKey: ["my-payslips", user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("payslips")
-        .select("*")
-        .eq("employee_id", user!.id)
-        .order("year", { ascending: false })
-        .order("month", { ascending: false });
-      return data ?? [];
-    },
-  });
 
   const { data: allSlips = [] } = useQuery({
     queryKey: ["all-payslips"],
     enabled: isHr,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("payslips")
-        .select("*, employees!payslips_employee_id_fkey(employee_code, designation, profiles:profiles!employees_id_fkey(full_name, email))")
-        .order("year", { ascending: false })
-        .order("month", { ascending: false })
-        .limit(500);
-      return data ?? [];
+      const data = await payrollService.getAll();
+      return (data ?? []).map((s: any) => ({
+        ...s,
+        net: s.net !== undefined ? s.net : Number(s.net_salary || 0),
+        gross: s.gross !== undefined ? s.gross : Number(s.basic_salary || 0),
+      }));
+    },
+  });
+
+  const runs = useMemo(() => {
+    const grouped = new Map<string, { id: string; month: number; year: number; status: string; processed_at?: string }>();
+    allSlips.forEach((s: any) => {
+      const key = `${s.year}-${s.month}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          id: key,
+          month: s.month,
+          year: s.year,
+          status: s.status,
+          processed_at: s.processed_at,
+        });
+      }
+    });
+    return Array.from(grouped.values()).sort((a, b) => b.year - a.year || b.month - a.month);
+  }, [allSlips]);
+
+  const { data: mySlips = [] } = useQuery({
+    queryKey: ["my-payslips", employee?.id],
+    enabled: !!employee?.id,
+    queryFn: async () => {
+      const data = await payrollService.getMySlips(employee!.id);
+      return (data ?? []).map((s: any) => ({
+        ...s,
+        net: s.net !== undefined ? s.net : Number(s.net_salary || 0),
+        gross: s.gross !== undefined ? s.gross : Number(s.basic_salary || 0),
+      }));
     },
   });
 
   const stats = useMemo(() => {
-    const ytd = allSlips.reduce((s, r) => s + Number(r.net || 0), 0);
+    const ytd = allSlips.reduce((s: number, r: any) => s + Number(r.net || 0), 0);
     const lastRun = runs[0];
-    const lastTotal = lastRun ? allSlips.filter((s) => s.run_id === lastRun.id).reduce((s, r) => s + Number(r.net || 0), 0) : 0;
-    const headcount = lastRun ? allSlips.filter((s) => s.run_id === lastRun.id).length : 0;
+    const lastTotal = lastRun ? allSlips.filter((s: any) => `${s.year}-${s.month}` === lastRun.id).reduce((s: number, r: any) => s + Number(r.net || 0), 0) : 0;
+    const headcount = lastRun ? allSlips.filter((s: any) => `${s.year}-${s.month}` === lastRun.id).length : 0;
     return { ytd, lastTotal, lastRun, headcount };
   }, [allSlips, runs]);
 
   const chartData = useMemo(() => {
     return [...runs].slice(0, 6).reverse().map((r) => ({
       label: `${monthName(r.month)} ${String(r.year).slice(2)}`,
-      total: allSlips.filter((s) => s.run_id === r.id).reduce((s, x) => s + Number(x.net || 0), 0),
+      total: allSlips.filter((s: any) => `${s.year}-${s.month}` === r.id).reduce((s: number, x: any) => s + Number(x.net || 0), 0),
     }));
   }, [runs, allSlips]);
 
@@ -163,23 +169,18 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: string; 
 }
 
 function MyPayslips({ slips }: { slips: any[] }) {
-  const { user } = useMe();
+  const { user, employee } = useMe();
 
-  const download = async (slip: any) => {
-    if (!user) return;
-    const { data: emp } = await supabase
-      .from("employees")
-      .select("employee_code, designation, department_id, departments(name), profiles!employees_id_fkey(full_name, email)")
-      .eq("id", user.id)
-      .maybeSingle();
+  const download = (slip: any) => {
+    if (!employee) return;
     downloadPayslipPDF({
       slip,
       employee: {
-        full_name: emp?.profiles?.full_name ?? user.email ?? "Employee",
-        employee_code: emp?.employee_code ?? "—",
-        designation: emp?.designation,
-        department: (emp?.departments as any)?.name,
-        email: emp?.profiles?.email,
+        full_name: employee.name || user?.name || "Employee",
+        employee_code: employee.employee_code ?? "—",
+        designation: employee.designation,
+        department: employee.department || employee.department_name,
+        email: employee.email || user?.email,
       },
     });
   };
@@ -229,21 +230,19 @@ function RunsTable({ runs }: { runs: any[] }) {
   const qc = useQueryClient();
   const { user } = useMe();
   const [openRun, setOpenRun] = useState<any>(null);
+  const { data: allSlips = [] } = useQuery({ queryKey: ["all-payslips"] }) as { data: any[] };
 
   const setStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: "processed" | "paid" | "draft" }) => {
-      const { error } = await supabase.from("payroll_runs").update({
-        status,
-        processed_by: user?.id,
-        processed_at: status !== "draft" ? new Date().toISOString() : null,
-      }).eq("id", id);
-      if (error) throw error;
+      const [year, month] = id.split("-").map(Number);
+      const slipsToUpdate = allSlips.filter((s: any) => s.year === year && s.month === month);
+      await Promise.all(slipsToUpdate.map((s: any) => payrollService.update(s.id, { status })));
     },
     onSuccess: () => {
       toast.success("Status updated");
-      qc.invalidateQueries({ queryKey: ["payroll-runs"] });
+      qc.invalidateQueries({ queryKey: ["all-payslips"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
 
   return (
@@ -290,15 +289,13 @@ function RunsTable({ runs }: { runs: any[] }) {
 }
 
 function RunDetailDialog({ run, onClose }: { run: any; onClose: () => void }) {
+  const { data: allSlips = [] } = useQuery({ queryKey: ["all-payslips"] }) as { data: any[] };
   const { data: slips = [] } = useQuery({
     queryKey: ["run-slips", run?.id],
     enabled: !!run?.id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("payslips")
-        .select("*, employees!payslips_employee_id_fkey(employee_code, designation, departments(name), profiles!employees_id_fkey(full_name, email))")
-        .eq("run_id", run.id);
-      return data ?? [];
+      const [year, month] = run.id.split("-").map(Number);
+      return allSlips.filter((s: any) => s.year === year && s.month === month);
     },
   });
 
@@ -363,7 +360,6 @@ function RunDetailDialog({ run, onClose }: { run: any; onClose: () => void }) {
 
 function NewRunDialog() {
   const qc = useQueryClient();
-  const { user } = useMe();
   const [open, setOpen] = useState(false);
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -373,80 +369,13 @@ function NewRunDialog() {
   const generate = async () => {
     setBusy(true);
     try {
-      // Create or fetch run
-      const { data: existing } = await supabase.from("payroll_runs").select("*").eq("month", month).eq("year", year).maybeSingle();
-      let run = existing;
-      if (!run) {
-        const { data, error } = await supabase.from("payroll_runs").insert({ month, year, status: "draft" }).select().single();
-        if (error) throw error;
-        run = data;
-      }
-      if (run.status !== "draft") throw new Error("Run is already processed");
-
-      // Fetch active employees
-      const { data: emps, error: empErr } = await supabase
-        .from("employees")
-        .select("id, salary_basic, employee_code")
-        .eq("status", "active");
-      if (empErr) throw empErr;
-      if (!emps?.length) throw new Error("No active employees");
-
-      const workingDays = new Date(year, month, 0).getDate();
-
-      // Approved leave days for the month per employee
-      const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
-      const monthEnd = `${year}-${String(month).padStart(2, "0")}-${workingDays}`;
-      const { data: leaves } = await supabase
-        .from("leave_requests")
-        .select("employee_id, start_date, end_date, leave_type")
-        .eq("status", "approved")
-        .lte("start_date", monthEnd)
-        .gte("end_date", monthStart);
-
-      const unpaidByEmp = new Map<string, number>();
-      (leaves ?? []).forEach((l) => {
-        if (l.leave_type !== "unpaid") return;
-        const s = new Date(Math.max(new Date(l.start_date).getTime(), new Date(monthStart).getTime()));
-        const e = new Date(Math.min(new Date(l.end_date).getTime(), new Date(monthEnd).getTime()));
-        const d = Math.max(0, Math.floor((e.getTime() - s.getTime()) / 86400000) + 1);
-        unpaidByEmp.set(l.employee_id, (unpaidByEmp.get(l.employee_id) ?? 0) + d);
-      });
-
-      const rows = emps.map((e) => {
-        const unpaid = unpaidByEmp.get(e.id) ?? 0;
-        const paidDays = Math.max(0, workingDays - unpaid);
-        const basicMonthly = Number(e.salary_basic ?? 0);
-        const calc = computeSalary(basicMonthly, paidDays, workingDays);
-        return {
-          run_id: run.id,
-          employee_id: e.id,
-          month, year,
-          basic: calc.basic,
-          hra: calc.hra,
-          allowances: calc.allowances,
-          gross: calc.gross,
-          pf: calc.pf,
-          tax: calc.tax,
-          other_deductions: 0,
-          net: calc.net,
-          working_days: workingDays,
-          paid_days: paidDays,
-        };
-      });
-
-      // Upsert (in case re-running)
-      const { error: upErr } = await supabase.from("payslips").upsert(rows, { onConflict: "run_id,employee_id" });
-      if (upErr) throw upErr;
-
-      await supabase.from("payroll_runs").update({ processed_by: user?.id }).eq("id", run.id);
-
-      toast.success(`Generated ${rows.length} payslips for ${monthName(month)} ${year}`);
-      qc.invalidateQueries({ queryKey: ["payroll-runs"] });
+      await payrollService.generate(month, year);
+      toast.success(`Generated payslips for ${monthName(month)} ${year}`);
       qc.invalidateQueries({ queryKey: ["all-payslips"] });
       qc.invalidateQueries({ queryKey: ["my-payslips"] });
       setOpen(false);
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(e.response?.data?.message || e.message);
     } finally {
       setBusy(false);
     }

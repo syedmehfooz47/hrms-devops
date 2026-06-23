@@ -1,7 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMe } from "@/hooks/use-me";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  attendanceService,
+  leaveService,
+  payrollService,
+  notificationService,
+  userService
+} from "@/services/api";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -17,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/profile")({
 });
 
 function ProfilePage() {
-  const { user, profile, roles } = useMe();
+  const { user, profile, roles, employee } = useMe();
   const qc = useQueryClient();
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -28,35 +34,35 @@ function ProfilePage() {
     setPhone(profile?.phone ?? "");
   }, [profile]);
 
-  const init = (profile?.full_name || user?.email || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const init = (profile?.full_name || user?.email || "?").split(" ").map((p: string) => p[0]).slice(0, 2).join("").toUpperCase();
 
   const today = new Date().toISOString().slice(0, 10);
   const att = useQuery({
-    queryKey: ["self-att", user?.id, today],
-    enabled: !!user?.id,
+    queryKey: ["self-att", employee?.id, today],
+    enabled: !!employee?.id,
     queryFn: async () => {
-      const { data } = await supabase.from("attendance").select("*")
-        .eq("employee_id", user!.id).eq("work_date", today).maybeSingle();
-      return data;
+      try {
+        return await attendanceService.getToday(employee!.id);
+      } catch (err) {
+        return null;
+      }
     },
   });
 
   const slips = useQuery({
-    queryKey: ["self-slips", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["self-slips", employee?.id],
+    enabled: !!employee?.id,
     queryFn: async () => {
-      const { data } = await supabase.from("payslips").select("*")
-        .eq("employee_id", user!.id).order("year", { ascending: false }).order("month", { ascending: false }).limit(3);
+      const data = await payrollService.getMySlips(employee!.id);
       return data ?? [];
     },
   });
 
   const leaves = useQuery({
-    queryKey: ["self-leaves", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["self-leaves", employee?.id],
+    enabled: !!employee?.id,
     queryFn: async () => {
-      const { data } = await supabase.from("leave_requests").select("*")
-        .eq("employee_id", user!.id).order("created_at", { ascending: false }).limit(5);
+      const data = await leaveService.getMy();
       return data ?? [];
     },
   });
@@ -65,19 +71,24 @@ function ProfilePage() {
     queryKey: ["self-notif", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
-      const { count } = await supabase.from("notifications").select("*", { count: "exact", head: true })
-        .eq("user_id", user!.id).eq("read", false);
-      return count ?? 0;
+      const data = await notificationService.getAll();
+      const unread = (data ?? []).filter((n: any) => !n.read).length;
+      return unread;
     },
   });
 
   const onSave = async () => {
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase.from("profiles").update({ full_name: fullName, phone }).eq("id", user.id);
-    setSaving(false);
-    if (error) toast.error(error.message);
-    else { toast.success("Profile updated"); qc.invalidateQueries({ queryKey: ["me"] }); }
+    try {
+      await userService.updateProfile(user.id, { full_name: fullName, phone });
+      toast.success("Profile updated");
+      qc.invalidateQueries({ queryKey: ["me"] });
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -97,9 +108,9 @@ function ProfilePage() {
               {roles.map((r) => <Badge key={r} variant="secondary" className="capitalize">{r.replace("_", " ")}</Badge>)}
             </div>
           </div>
-          {user && (
+          {employee?.id && (
             <Button asChild variant="outline" className="hidden sm:flex">
-              <Link to="/employees/$id" params={{ id: user.id }}>Employment details <ArrowRight className="h-4 w-4" /></Link>
+              <Link to="/employees/$id" params={{ id: String(employee.id) }}>Employment details <ArrowRight className="h-4 w-4" /></Link>
             </Button>
           )}
         </CardContent>
@@ -142,7 +153,7 @@ function ProfilePage() {
             <CardDescription>Your latest requests.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {(leaves.data ?? []).map((l) => (
+            {(leaves.data ?? []).map((l: any) => (
               <div key={l.id} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
                 <div>
                   <div className="font-medium capitalize">{l.leave_type}</div>
