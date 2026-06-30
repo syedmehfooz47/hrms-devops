@@ -60,7 +60,31 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                sonarqube_analysis(env.SONAR_API, env.SONAR_PROJECT, env.SONAR_KEY)
+                script {
+                    sh '''
+                        if ! command -v node &> /dev/null; then
+                            ARCH=$(uname -m)
+                            if [ "$ARCH" = "aarch64" ]; then
+                                NODE_URL="https://nodejs.org/dist/v20.14.0/node-v20.14.0-linux-arm64.tar.xz"
+                                NODE_DIR="node-v20.14.0-linux-arm64"
+                            else
+                                NODE_URL="https://nodejs.org/dist/v20.14.0/node-v20.14.0-linux-x64.tar.xz"
+                                NODE_DIR="node-v20.14.0-linux-x64"
+                            fi
+                            if [ ! -d "node_bin" ]; then
+                                echo "Downloading Node.js..."
+                                curl -sL $NODE_URL | tar -xJ
+                                mv $NODE_DIR node_bin
+                            fi
+                        else
+                            mkdir -p node_bin/bin
+                            ln -sfn $(which node) node_bin/bin/node
+                        fi
+                    '''
+                }
+                withEnv(["PATH+NODE=${WORKSPACE}/node_bin/bin"]) {
+                    sonarqube_analysis(env.SONAR_API, env.SONAR_PROJECT, env.SONAR_KEY)
+                }
             }
         }
 
