@@ -16,6 +16,8 @@ spec:
       labels:
         app: postgres
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: mkcluster-worker
       containers:
         - name: postgres
           image: postgres:16
