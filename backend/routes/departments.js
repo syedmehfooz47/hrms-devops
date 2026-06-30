@@ -68,6 +68,12 @@ router.put("/:id", authorize("admin", "hr_manager"), async (req, res) => {
       return res.status(404).json({ message: "Department not found" });
     }
 
+    // Sync denormalized department name in employees table
+    await pool.query(
+      "UPDATE employees SET department = $1 WHERE department_id = $2",
+      [name, req.params.id]
+    );
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -86,6 +92,11 @@ router.delete("/:id", authorize("admin", "hr_manager"), async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Department not found" });
     }
+
+    // Clear denormalized department name for orphaned employees
+    await pool.query(
+      "UPDATE employees SET department = NULL WHERE department_id IS NULL"
+    );
 
     res.json({
       success: true,

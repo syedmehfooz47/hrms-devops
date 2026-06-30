@@ -107,15 +107,59 @@ router.post("/", authorize("admin", "hr_manager", "dept_manager"), async (req, r
 // UPDATE a job posting / status
 router.put("/:id", authorize("admin", "hr_manager", "dept_manager"), async (req, res) => {
   try {
-    const { status } = req.body;
-    const result = await pool.query(
-      "UPDATE recruitment SET status = $1 WHERE id = $2 RETURNING *",
-      [status, req.params.id]
-    );
+    const {
+      title,
+      candidate_name,
+      email,
+      position,
+      department_id,
+      location,
+      employment_type,
+      description,
+      requirements,
+      salary_min,
+      salary_max,
+      status,
+    } = req.body;
 
-    if (result.rows.length === 0) {
+    const checkJob = await pool.query("SELECT * FROM recruitment WHERE id = $1", [req.params.id]);
+    if (checkJob.rows.length === 0) {
       return res.status(404).json({ message: "Job posting not found" });
     }
+
+    const result = await pool.query(
+      `UPDATE recruitment
+       SET
+         title = COALESCE($1, title),
+         candidate_name = COALESCE($2, candidate_name),
+         email = COALESCE($3, email),
+         position = COALESCE($4, position),
+         department_id = COALESCE($5, department_id),
+         location = COALESCE($6, location),
+         employment_type = COALESCE($7, employment_type),
+         description = COALESCE($8, description),
+         requirements = COALESCE($9, requirements),
+         salary_min = COALESCE($10, salary_min),
+         salary_max = COALESCE($11, salary_max),
+         status = COALESCE($12, status)
+       WHERE id = $13
+       RETURNING *`,
+      [
+        title !== undefined ? title : null,
+        candidate_name !== undefined ? candidate_name : null,
+        email !== undefined ? email : null,
+        position !== undefined ? position : null,
+        department_id !== undefined ? department_id : null,
+        location !== undefined ? location : null,
+        employment_type !== undefined ? employment_type : null,
+        description !== undefined ? description : null,
+        requirements !== undefined ? requirements : null,
+        salary_min !== undefined ? (salary_min ? parseFloat(salary_min) : null) : null,
+        salary_max !== undefined ? (salary_max ? parseFloat(salary_max) : null) : null,
+        status !== undefined ? status : null,
+        req.params.id,
+      ]
+    );
 
     res.json(result.rows[0]);
   } catch (err) {
@@ -196,15 +240,56 @@ router.post("/candidates", authorize("admin", "hr_manager", "dept_manager"), asy
 // UPDATE candidate stage / details
 router.put("/candidates/:id", authorize("admin", "hr_manager", "dept_manager"), async (req, res) => {
   try {
-    const { stage } = req.body;
-    const result = await pool.query(
-      "UPDATE candidates SET stage = $1 WHERE id = $2 RETURNING *",
-      [stage, req.params.id]
-    );
+    const {
+      job_id,
+      full_name,
+      email,
+      phone,
+      resume_url,
+      source,
+      notes,
+      stage,
+      ai_score,
+      ai_analysis,
+      ai_status,
+    } = req.body;
 
-    if (result.rows.length === 0) {
+    const checkCand = await pool.query("SELECT * FROM candidates WHERE id = $1", [req.params.id]);
+    if (checkCand.rows.length === 0) {
       return res.status(404).json({ message: "Candidate not found" });
     }
+
+    const result = await pool.query(
+      `UPDATE candidates
+       SET
+         job_id = COALESCE($1, job_id),
+         full_name = COALESCE($2, full_name),
+         email = COALESCE($3, email),
+         phone = COALESCE($4, phone),
+         resume_url = COALESCE($5, resume_url),
+         source = COALESCE($6, source),
+         notes = COALESCE($7, notes),
+         stage = COALESCE($8, stage),
+         ai_score = COALESCE($9, ai_score),
+         ai_analysis = COALESCE($10, ai_analysis),
+         ai_status = COALESCE($11, ai_status)
+       WHERE id = $12
+       RETURNING *`,
+      [
+        job_id !== undefined ? job_id : null,
+        full_name !== undefined ? full_name : null,
+        email !== undefined ? email : null,
+        phone !== undefined ? phone : null,
+        resume_url !== undefined ? resume_url : null,
+        source !== undefined ? source : null,
+        notes !== undefined ? notes : null,
+        stage !== undefined ? stage : null,
+        ai_score !== undefined ? ai_score : null,
+        ai_analysis !== undefined ? ai_analysis : null,
+        ai_status !== undefined ? ai_status : null,
+        req.params.id,
+      ]
+    );
 
     res.json(result.rows[0]);
   } catch (err) {
@@ -501,18 +586,56 @@ router.post("/interviews", authorize("admin", "hr_manager", "dept_manager"), asy
   }
 });
 
-// UPDATE interview status / feedback
+// UPDATE interview status / details
 router.put("/interviews/:id", authorize("admin", "hr_manager", "dept_manager"), async (req, res) => {
   try {
-    const { status } = req.body;
-    const result = await pool.query(
-      "UPDATE interviews SET status = $1 WHERE id = $2 RETURNING *",
-      [status, req.params.id]
-    );
+    const {
+      candidate_id,
+      interviewer_id,
+      scheduled_at,
+      duration_minutes,
+      mode,
+      location,
+      round,
+      status,
+      feedback,
+      rating,
+    } = req.body;
 
-    if (result.rows.length === 0) {
+    const checkInt = await pool.query("SELECT * FROM interviews WHERE id = $1", [req.params.id]);
+    if (checkInt.rows.length === 0) {
       return res.status(404).json({ message: "Interview not found" });
     }
+
+    const result = await pool.query(
+      `UPDATE interviews
+       SET
+         candidate_id = COALESCE($1, candidate_id),
+         interviewer_id = COALESCE($2, interviewer_id),
+         scheduled_at = COALESCE($3, scheduled_at),
+         duration_minutes = COALESCE($4, duration_minutes),
+         mode = COALESCE($5, mode),
+         location = COALESCE($6, location),
+         round = COALESCE($7, round),
+         status = COALESCE($8, status),
+         feedback = COALESCE($9, feedback),
+         rating = COALESCE($10, rating)
+       WHERE id = $11
+       RETURNING *`,
+      [
+        candidate_id !== undefined ? candidate_id : null,
+        interviewer_id !== undefined ? interviewer_id : null,
+        scheduled_at !== undefined ? scheduled_at : null,
+        duration_minutes !== undefined ? duration_minutes : null,
+        mode !== undefined ? mode : null,
+        location !== undefined ? location : null,
+        round !== undefined ? round : null,
+        status !== undefined ? status : null,
+        feedback !== undefined ? feedback : null,
+        rating !== undefined ? rating : null,
+        req.params.id,
+      ]
+    );
 
     res.json(result.rows[0]);
   } catch (err) {

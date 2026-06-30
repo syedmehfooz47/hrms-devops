@@ -49,10 +49,14 @@ function EmployeeDetailPage() {
       if (data.user_id) {
         await userService.updateProfile(data.user_id, {
           name: form.profiles?.full_name,
+          email: form.profiles?.email,
           phone: form.profiles?.phone,
         });
       }
       await employeeService.update(id, {
+        name: form.profiles?.full_name,
+        email: form.profiles?.email,
+        phone: form.profiles?.phone,
         designation: form.designation,
         department_id: form.department_id ? Number(form.department_id) : null,
         employment_type: form.employment_type,
@@ -102,7 +106,7 @@ function EmployeeDetailPage() {
           <CardHeader><CardTitle className="text-base">Personal</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <Field label="Full name"><Input disabled={!canManage} value={form.profiles?.full_name ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...form.profiles, full_name: e.target.value } })} /></Field>
-            <Field label="Email"><Input disabled value={data.profiles?.email ?? ""} /></Field>
+            <Field label="Email"><Input disabled={!canManage} value={form.profiles?.email ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...form.profiles, email: e.target.value } })} /></Field>
             <Field label="Phone"><Input disabled={!canManage} value={form.profiles?.phone ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...form.profiles, phone: e.target.value } })} /></Field>
             <Field label="Date of birth"><Input disabled={!canManage} type="date" value={form.date_of_birth ?? ""} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} /></Field>
             <Field label="Address"><Textarea disabled={!canManage} value={form.address ?? ""} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>

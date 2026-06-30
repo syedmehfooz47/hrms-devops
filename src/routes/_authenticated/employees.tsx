@@ -215,7 +215,7 @@ function NewEmployeeDialog({ departments, candidates }: { departments: any[]; ca
               <SelectContent>
                 {candidates.length === 0 && <div className="px-2 py-2 text-xs text-muted-foreground">All users already employees.</div>}
                 {candidates.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.full_name || c.email} — {c.email}</SelectItem>
+                  <SelectItem key={c.id} value={String(c.id)}>{c.full_name || c.email} — {c.email}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -230,7 +230,7 @@ function NewEmployeeDialog({ departments, candidates }: { departments: any[]; ca
               <Select value={form.department_id} onValueChange={(v) => setForm({ ...form, department_id: v })}>
                 <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                 <SelectContent>
-                  {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                  {departments.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

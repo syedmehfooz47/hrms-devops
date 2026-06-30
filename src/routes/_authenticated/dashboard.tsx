@@ -19,7 +19,7 @@ function Dashboard() {
       const db = res.dashboard || {};
       return {
         employees: db.employees ?? 0,
-        active: db.employees ?? 0,
+        active: db.activeEmployees ?? db.employees ?? 0,
         departments: db.departments ?? 0,
         pendingLeave: db.leaveRequests ?? 0,
         todayAttendance: db.attendance ?? 0,

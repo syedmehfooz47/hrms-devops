@@ -179,6 +179,14 @@ router.post("/", authorize("admin", "hr_manager"), async (req, res) => {
     const finalStatus = status || "active";
     const finalType = employment_type || "full_time";
 
+    let finalDeptName = department || null;
+    if (department_id && !finalDeptName) {
+      const deptRes = await pool.query("SELECT name FROM departments WHERE id = $1", [department_id]);
+      if (deptRes.rows.length > 0) {
+        finalDeptName = deptRes.rows[0].name;
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO employees
        (user_id, employee_code, name, email, department_id, department, designation, employment_type, status, date_of_joining, date_of_birth, salary_basic, phone, address, emergency_contact_name, emergency_contact_phone)
@@ -190,7 +198,7 @@ router.post("/", authorize("admin", "hr_manager"), async (req, res) => {
         finalName || "",
         finalEmail || "",
         department_id || null,
-        department || null,
+        finalDeptName,
         designation || null,
         finalType,
         finalStatus,
@@ -259,6 +267,18 @@ router.put("/:id", async (req, res) => {
     const finalDateOfJoining = isHrOrAdmin ? date_of_joining : emp.date_of_joining;
     const finalSalaryBasic = isHrOrAdmin ? salary_basic : emp.salary_basic;
 
+    let finalDeptName = finalDept;
+    if (finalDeptId !== undefined && finalDeptId !== null && (!finalDeptName || finalDeptId !== emp.department_id)) {
+      const deptRes = await pool.query("SELECT name FROM departments WHERE id = $1", [finalDeptId]);
+      if (deptRes.rows.length > 0) {
+        finalDeptName = deptRes.rows[0].name;
+      } else {
+        finalDeptName = null;
+      }
+    } else if (finalDeptId === null) {
+      finalDeptName = null;
+    }
+
     const result = await pool.query(
       `UPDATE employees
        SET
@@ -286,7 +306,7 @@ router.put("/:id", async (req, res) => {
         name !== undefined ? name : null,
         email !== undefined ? email : null,
         finalDeptId !== undefined ? finalDeptId : null,
-        finalDept !== undefined ? finalDept : null,
+        finalDeptName !== undefined ? finalDeptName : null,
         finalDesignation !== undefined ? finalDesignation : null,
         finalType !== undefined ? finalType : null,
         finalStatus !== undefined ? finalStatus : null,

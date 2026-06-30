@@ -50,6 +50,24 @@ router.get("/my", async (req, res) => {
   }
 });
 
+// Helper: Ensure default leave balances exist for employee and year
+async function ensureLeaveBalances(employeeId, year) {
+  const defaults = [
+    { type: "earned", allocated: 20 },
+    { type: "casual", allocated: 10 },
+    { type: "sick", allocated: 10 },
+  ];
+
+  for (const d of defaults) {
+    await pool.query(
+      `INSERT INTO leave_balances (employee_id, year, leave_type, allocated, used)
+       VALUES ($1, $2, $3, $4, 0)
+       ON CONFLICT (employee_id, year, leave_type) DO NOTHING`,
+      [employeeId, year, d.type, d.allocated]
+    );
+  }
+}
+
 // GET leave balances for an employee
 router.get("/balances/:employeeId", async (req, res) => {
   try {
@@ -64,37 +82,14 @@ router.get("/balances/:employeeId", async (req, res) => {
 
     const year = parseInt(req.query.year) || new Date().getFullYear();
 
-    // Check if balances exist for this employee and year
-    const checkRes = await pool.query(
+    await ensureLeaveBalances(employeeId, year);
+
+    const result = await pool.query(
       "SELECT * FROM leave_balances WHERE employee_id = $1 AND year = $2",
       [employeeId, year]
     );
 
-    if (checkRes.rows.length === 0) {
-      // Initialize default balances
-      const defaults = [
-        { type: "Annual Leave", allocated: 20 },
-        { type: "Casual Leave", allocated: 10 },
-        { type: "Sick Leave", allocated: 10 },
-      ];
-
-      for (const d of defaults) {
-        await pool.query(
-          `INSERT INTO leave_balances (employee_id, year, leave_type, allocated, used)
-           VALUES ($1, $2, $3, $4, 0)
-           ON CONFLICT (employee_id, year, leave_type) DO NOTHING`,
-          [employeeId, year, d.type, d.allocated]
-        );
-      }
-
-      const freshRes = await pool.query(
-        "SELECT * FROM leave_balances WHERE employee_id = $1 AND year = $2",
-        [employeeId, year]
-      );
-      return res.json(freshRes.rows);
-    }
-
-    res.json(checkRes.rows);
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -115,6 +110,11 @@ router.post("/", async (req, res) => {
         return res.status(403).json({ message: "You can only apply leave for yourself" });
       }
     }
+
+    // Ensure default leave balances exist for the year of this leave request
+    const start = new Date(start_date);
+    const year = start.getFullYear();
+    await ensureLeaveBalances(employee_id, year);
 
     const result = await pool.query(
       `INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, reason, status)
@@ -153,6 +153,9 @@ router.put("/:id/approve", authorize("admin", "hr_manager", "dept_manager"), asy
     const timeDiff = Math.abs(end.getTime() - start.getTime());
     const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1;
     const year = start.getFullYear();
+
+    // Ensure default leave balances exist for the year of this leave request
+    await ensureLeaveBalances(leave.employee_id, year);
 
     // Check leave balance before approving
     const balanceRes = await pool.query(
