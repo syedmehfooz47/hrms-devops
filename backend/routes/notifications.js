@@ -17,11 +17,25 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
+// PUT mark all notifications as read (must be BEFORE /:id/read to avoid route conflict)
+router.put("/read-all", authenticate, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'UPDATE notifications SET "read" = TRUE WHERE user_id = $1 RETURNING *',
+      [req.user.id]
+    );
+    res.json({ success: true, message: `Marked ${result.rowCount} notifications as read` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PUT mark single notification as read
 router.put("/:id/read", authenticate, async (req, res) => {
   try {
     const result = await pool.query(
-      "UPDATE notifications SET read = TRUE WHERE id = $1 AND user_id = $2 RETURNING *",
+      'UPDATE notifications SET "read" = TRUE WHERE id = $1 AND user_id = $2 RETURNING *',
       [req.params.id, req.user.id]
     );
 
@@ -30,20 +44,6 @@ router.put("/:id/read", authenticate, async (req, res) => {
     }
 
     res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// PUT mark all notifications as read
-router.put("/read-all", authenticate, async (req, res) => {
-  try {
-    const result = await pool.query(
-      "UPDATE notifications SET read = TRUE WHERE user_id = $1 RETURNING *",
-      [req.user.id]
-    );
-    res.json({ success: true, message: `Marked ${result.rowCount} notifications as read` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

@@ -31,7 +31,7 @@ function EmployeeDetailPage() {
     },
   });
 
-  const canManage = isHrOrAdmin(roles) || (data && String(user?.id) === String(data.user_id));
+  const canManage = isHrOrAdmin(roles) || user?.role === "admin" || (data && String(user?.id) === String(data.user_id));
 
   const [form, setForm] = useState<any>({});
   useEffect(() => { if (data) setForm(data); }, [data]);

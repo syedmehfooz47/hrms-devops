@@ -26,6 +26,7 @@ router.get("/", authenticate, async (req, res) => {
 
       dashboard: {
         employees: parseInt(employees.rows[0].count),
+        activeEmployees: parseInt(active.rows[0].count),
         departments: parseInt(departments.rows[0].count),
         attendance: parseInt(attendance.rows[0].count),
         leaveRequests: parseInt(leaveRequests.rows[0].count),

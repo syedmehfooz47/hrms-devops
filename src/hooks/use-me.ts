@@ -20,10 +20,29 @@ export function useMe() {
     },
   });
 
+  // Fetch fresh profile from the server to avoid stale localStorage data
   const { data: profile } = useQuery({
     queryKey: ["me", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
+      try {
+        const freshUser = await authService.getMe();
+        // Update localStorage so other parts of the app stay in sync
+        if (freshUser) {
+          const userData = freshUser.user || freshUser;
+          localStorage.setItem("user", JSON.stringify(userData));
+          return {
+            id: userData.id,
+            full_name: userData.name,
+            email: userData.email,
+            role: userData.role,
+            phone: userData.phone,
+            avatar_url: userData.avatar_url,
+          };
+        }
+      } catch {
+        // Fallback to localStorage if API call fails
+      }
       const currentUser = authService.getCurrentUser();
       if (!currentUser) return null;
       return {
@@ -40,7 +59,14 @@ export function useMe() {
   const { data: roles = [] as AppRole[] } = useQuery({
     queryKey: ["my-roles", user?.id],
     enabled: !!user?.id,
-    queryFn: () => {
+    queryFn: async () => {
+      try {
+        const freshUser = await authService.getMe();
+        const userData = freshUser?.user || freshUser;
+        if (userData?.role) return [userData.role as AppRole];
+      } catch {
+        // Fallback to localStorage
+      }
       const currentUser = authService.getCurrentUser();
       return currentUser?.role ? [currentUser.role as AppRole] : ([] as AppRole[]);
     },
@@ -48,5 +74,3 @@ export function useMe() {
 
   return { user, profile, roles, employee };
 }
-
-

@@ -361,7 +361,8 @@ export const documentService = {
   },
 
   download: (id: number | string) => {
-    return `${API_URL}/documents/download/${id}`;
+    const token = localStorage.getItem("token");
+    return `${API_URL}/documents/download/${id}?token=${token}`;
   },
 
   delete: async (id: number | string) => {

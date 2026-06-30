@@ -22,7 +22,19 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /pdf|doc|docx|txt/;
+    const ext = file.originalname.split('.').pop().toLowerCase();
+    if (allowedTypes.test(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('File type not allowed. Accepted: pdf, doc, docx, txt'));
+    }
+  }
+});
 
 router.use(authenticate);
 

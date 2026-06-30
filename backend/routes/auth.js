@@ -11,12 +11,18 @@ const SECRET = process.env.JWT_SECRET || "hrms_secret_key_2024_pulse";
 // Register
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, phone } = req.body;
+
+    // Input validation
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Name, email, and password are required" });
+    }
     
     // Check if this is the first user in the database to auto-assign admin
     const countRes = await pool.query("SELECT COUNT(*) FROM users");
     const isFirstUser = parseInt(countRes.rows[0].count) === 0;
-    const userRole = isFirstUser ? "admin" : (role || "employee");
+    // Only the first user gets admin role — all others are employees (role must be assigned by admin via profile update)
+    const userRole = isFirstUser ? "admin" : "employee";
 
     // Check if user already exists
     const checkUser = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
@@ -35,9 +41,15 @@ router.post("/register", async (req, res) => {
 
     const user = result.rows[0];
 
-    // If role is employee (or not admin), automatically create an employee record
+    // If role is employee (not admin), automatically create an employee record
     if (userRole !== "admin") {
-      const empCode = "EMP-" + Math.floor(100000 + Math.random() * 900000);
+      // Generate employee code with retry logic to avoid collisions
+      let empCode;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        empCode = "EMP-" + Math.floor(100000 + Math.random() * 900000);
+        const existing = await pool.query("SELECT id FROM employees WHERE employee_code = $1", [empCode]);
+        if (existing.rows.length === 0) break;
+      }
       await pool.query(
         `INSERT INTO employees (user_id, employee_code, name, email, phone, status)
          VALUES ($1, $2, $3, $4, $5, 'active')`,

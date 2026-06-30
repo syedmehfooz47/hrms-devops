@@ -5,6 +5,14 @@ const { authenticate, authorize } = require("../middleware/auth");
 
 router.use(authenticate);
 
+// Helper: Get today's date in IST (UTC+5:30) to avoid timezone issues around midnight
+function getTodayIST() {
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffset);
+  return istDate.toISOString().slice(0, 10);
+}
+
 // GET all attendance (with optional filters: employee_id, date, month, year)
 router.get("/", async (req, res) => {
   try {
@@ -67,7 +75,7 @@ router.get("/", async (req, res) => {
 // GET team attendance for a specific date
 router.get("/team", authorize("admin", "hr_manager", "dept_manager"), async (req, res) => {
   try {
-    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const date = req.query.date || getTodayIST();
     
     const result = await pool.query(
       `SELECT a.*, e.name AS employee_name, e.email AS employee_email, e.employee_code
@@ -93,7 +101,7 @@ router.get("/today/:employeeId", async (req, res) => {
     if (!isManagerOrAbove && String(userEmpId) !== String(req.params.employeeId)) {
       return res.status(403).json({ message: "Insufficient permissions" });
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayIST();
     const result = await pool.query(
       `SELECT * FROM attendance 
        WHERE employee_id = $1 AND (work_date = $2 OR attendance_date = $2)
@@ -152,7 +160,7 @@ router.post("/checkin", async (req, res) => {
     if (!isHrOrAdmin && String(userEmpId) !== String(employee_id)) {
       return res.status(403).json({ message: "Insufficient permissions to check in other employees" });
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayIST();
 
     // Check if check-in already exists
     const check = await pool.query(

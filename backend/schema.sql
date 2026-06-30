@@ -34,8 +34,12 @@ CREATE TABLE IF NOT EXISTS employees (
   employment_type VARCHAR(50) DEFAULT 'full_time',
   status VARCHAR(50) DEFAULT 'active',
   date_of_joining DATE,
+  date_of_birth DATE,
   salary_basic NUMERIC(12,2) DEFAULT 0,
   phone VARCHAR(20),
+  address TEXT,
+  emergency_contact_name VARCHAR(255),
+  emergency_contact_phone VARCHAR(20),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

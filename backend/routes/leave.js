@@ -106,6 +106,16 @@ router.post("/", async (req, res) => {
   try {
     const { employee_id, leave_type, start_date, end_date, reason } = req.body;
 
+    // Ownership check: only HR/Admin can apply leave on behalf of others
+    const isHrOrAdmin = req.user.role === "admin" || req.user.role === "hr_manager";
+    if (!isHrOrAdmin) {
+      const empRes = await pool.query("SELECT id FROM employees WHERE user_id = $1", [req.user.id]);
+      const userEmpId = empRes.rows[0]?.id;
+      if (String(userEmpId) !== String(employee_id)) {
+        return res.status(403).json({ message: "You can only apply leave for yourself" });
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, reason, status)
        VALUES ($1, $2, $3, $4, $5, 'pending')
@@ -137,6 +147,26 @@ router.put("/:id/approve", authorize("admin", "hr_manager", "dept_manager"), asy
       return res.status(400).json({ message: `Leave request has already been ${leave.status}` });
     }
 
+    // Calculate leave days
+    const start = new Date(leave.start_date);
+    const end = new Date(leave.end_date);
+    const timeDiff = Math.abs(end.getTime() - start.getTime());
+    const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1;
+    const year = start.getFullYear();
+
+    // Check leave balance before approving
+    const balanceRes = await pool.query(
+      "SELECT allocated, used FROM leave_balances WHERE employee_id = $1 AND leave_type = $2 AND year = $3",
+      [leave.employee_id, leave.leave_type, year]
+    );
+    if (balanceRes.rows.length > 0) {
+      const balance = balanceRes.rows[0];
+      const remaining = balance.allocated - balance.used;
+      if (days > remaining) {
+        return res.status(400).json({ message: `Insufficient leave balance. ${remaining} day(s) remaining for ${leave.leave_type}.` });
+      }
+    }
+
     // Update leave request status
     const result = await pool.query(
       `UPDATE leave_requests
@@ -145,13 +175,6 @@ router.put("/:id/approve", authorize("admin", "hr_manager", "dept_manager"), asy
        RETURNING *`,
       [finalApproverId, approver_note || null, req.params.id]
     );
-
-    // Calculate leave days
-    const start = new Date(leave.start_date);
-    const end = new Date(leave.end_date);
-    const timeDiff = Math.abs(end.getTime() - start.getTime());
-    const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1;
-    const year = start.getFullYear();
 
     // Increment used leave count in balances
     await pool.query(
@@ -180,6 +203,27 @@ router.put("/:id/reject", authorize("admin", "hr_manager", "dept_manager"), asyn
       return res.status(404).json({ message: "Leave request not found" });
     }
 
+    const leave = check.rows[0];
+    if (leave.status === "rejected") {
+      return res.status(400).json({ message: "Leave request has already been rejected" });
+    }
+
+    // If rejecting a previously approved leave, reverse the balance deduction
+    if (leave.status === "approved") {
+      const start = new Date(leave.start_date);
+      const end = new Date(leave.end_date);
+      const timeDiff = Math.abs(end.getTime() - start.getTime());
+      const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1;
+      const year = start.getFullYear();
+
+      await pool.query(
+        `UPDATE leave_balances
+         SET used = GREATEST(used - $1, 0)
+         WHERE employee_id = $2 AND leave_type = $3 AND year = $4`,
+        [days, leave.employee_id, leave.leave_type, year]
+      );
+    }
+
     const result = await pool.query(
       `UPDATE leave_requests
        SET status = 'rejected', approver_id = $1, approver_note = $2, decided_at = CURRENT_TIMESTAMP
@@ -198,7 +242,7 @@ router.put("/:id/reject", authorize("admin", "hr_manager", "dept_manager"), asyn
 // Cancel / Delete leave request
 router.delete("/:id", async (req, res) => {
   try {
-    const checkRes = await pool.query("SELECT employee_id, status FROM leave_requests WHERE id = $1", [req.params.id]);
+    const checkRes = await pool.query("SELECT * FROM leave_requests WHERE id = $1", [req.params.id]);
     if (checkRes.rows.length === 0) {
       return res.status(404).json({ message: "Leave request not found" });
     }
@@ -216,7 +260,23 @@ router.delete("/:id", async (req, res) => {
       return res.status(400).json({ message: "Cannot cancel leave request that is already approved or rejected" });
     }
 
-    const result = await pool.query(
+    // If deleting an approved leave, reverse the balance deduction
+    if (leaveReq.status === "approved") {
+      const start = new Date(leaveReq.start_date);
+      const end = new Date(leaveReq.end_date);
+      const timeDiff = Math.abs(end.getTime() - start.getTime());
+      const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1;
+      const year = start.getFullYear();
+
+      await pool.query(
+        `UPDATE leave_balances
+         SET used = GREATEST(used - $1, 0)
+         WHERE employee_id = $2 AND leave_type = $3 AND year = $4`,
+        [days, leaveReq.employee_id, leaveReq.leave_type, year]
+      );
+    }
+
+    await pool.query(
       "DELETE FROM leave_requests WHERE id = $1 RETURNING *",
       [req.params.id]
     );

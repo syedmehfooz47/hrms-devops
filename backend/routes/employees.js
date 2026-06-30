@@ -143,8 +143,12 @@ router.post("/", authorize("admin", "hr_manager"), async (req, res) => {
       employment_type,
       status,
       date_of_joining,
+      date_of_birth,
       salary_basic,
       phone,
+      address,
+      emergency_contact_name,
+      emergency_contact_phone,
     } = req.body;
 
     const finalUserId = user_id || profile_id || null;
@@ -162,14 +166,23 @@ router.post("/", authorize("admin", "hr_manager"), async (req, res) => {
       }
     }
 
-    const finalCode = employee_code || ("EMP-" + Math.floor(100000 + Math.random() * 900000));
+    // Generate employee code with retry logic to avoid unique constraint collisions
+    let finalCode = employee_code;
+    if (!finalCode) {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        finalCode = "EMP-" + Math.floor(100000 + Math.random() * 900000);
+        const existing = await pool.query("SELECT id FROM employees WHERE employee_code = $1", [finalCode]);
+        if (existing.rows.length === 0) break;
+        if (attempt === 4) return res.status(500).json({ message: "Could not generate unique employee code. Please provide one manually." });
+      }
+    }
     const finalStatus = status || "active";
     const finalType = employment_type || "full_time";
 
     const result = await pool.query(
       `INSERT INTO employees
-       (user_id, employee_code, name, email, department_id, department, designation, employment_type, status, date_of_joining, salary_basic, phone)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       (user_id, employee_code, name, email, department_id, department, designation, employment_type, status, date_of_joining, date_of_birth, salary_basic, phone, address, emergency_contact_name, emergency_contact_phone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
       [
         finalUserId,
@@ -182,8 +195,12 @@ router.post("/", authorize("admin", "hr_manager"), async (req, res) => {
         finalType,
         finalStatus,
         date_of_joining || null,
+        date_of_birth || null,
         salary_basic ? parseFloat(salary_basic) : 0,
         finalPhone || null,
+        address || null,
+        emergency_contact_name || null,
+        emergency_contact_phone || null,
       ]
     );
 
@@ -223,8 +240,12 @@ router.put("/:id", async (req, res) => {
       employment_type,
       status,
       date_of_joining,
+      date_of_birth,
       salary_basic,
       phone,
+      address,
+      emergency_contact_name,
+      emergency_contact_phone,
     } = req.body;
 
     // Prevent non-HR/Admin users from changing role-restricted fields
@@ -245,29 +266,37 @@ router.put("/:id", async (req, res) => {
          employee_code = COALESCE($2, employee_code),
          name = COALESCE($3, name),
          email = COALESCE($4, email),
-         department_id = $5,
-         department = $6,
+         department_id = COALESCE($5, department_id),
+         department = COALESCE($6, department),
          designation = COALESCE($7, designation),
          employment_type = COALESCE($8, employment_type),
          status = COALESCE($9, status),
-         date_of_joining = $10,
-         salary_basic = COALESCE($11, salary_basic),
-         phone = COALESCE($12, phone)
-       WHERE id = $13
+         date_of_joining = COALESCE($10, date_of_joining),
+         date_of_birth = COALESCE($11, date_of_birth),
+         salary_basic = COALESCE($12, salary_basic),
+         phone = COALESCE($13, phone),
+         address = COALESCE($14, address),
+         emergency_contact_name = COALESCE($15, emergency_contact_name),
+         emergency_contact_phone = COALESCE($16, emergency_contact_phone)
+       WHERE id = $17
        RETURNING *`,
       [
-        finalUserId !== undefined ? finalUserId : emp.user_id,
-        finalCode !== undefined ? finalCode : emp.employee_code,
-        name !== undefined ? name : emp.name,
-        email !== undefined ? email : emp.email,
-        finalDeptId !== undefined ? finalDeptId : emp.department_id,
-        finalDept !== undefined ? finalDept : emp.department,
-        finalDesignation !== undefined ? finalDesignation : emp.designation,
-        finalType !== undefined ? finalType : emp.employment_type,
-        finalStatus !== undefined ? finalStatus : emp.status,
-        finalDateOfJoining !== undefined ? finalDateOfJoining : emp.date_of_joining,
-        finalSalaryBasic !== undefined ? (finalSalaryBasic ? parseFloat(finalSalaryBasic) : 0) : emp.salary_basic,
-        phone !== undefined ? phone : emp.phone,
+        finalUserId !== undefined ? finalUserId : null,
+        finalCode !== undefined ? finalCode : null,
+        name !== undefined ? name : null,
+        email !== undefined ? email : null,
+        finalDeptId !== undefined ? finalDeptId : null,
+        finalDept !== undefined ? finalDept : null,
+        finalDesignation !== undefined ? finalDesignation : null,
+        finalType !== undefined ? finalType : null,
+        finalStatus !== undefined ? finalStatus : null,
+        finalDateOfJoining !== undefined ? finalDateOfJoining : null,
+        date_of_birth !== undefined ? date_of_birth : null,
+        finalSalaryBasic !== undefined ? (finalSalaryBasic ? parseFloat(finalSalaryBasic) : 0) : null,
+        phone !== undefined ? phone : null,
+        address !== undefined ? address : null,
+        emergency_contact_name !== undefined ? emergency_contact_name : null,
+        emergency_contact_phone !== undefined ? emergency_contact_phone : null,
         req.params.id,
       ]
     );
