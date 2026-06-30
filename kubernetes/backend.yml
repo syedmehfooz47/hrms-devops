@@ -25,7 +25,7 @@ spec:
             - "until pg_isready -h postgres-service.hrms.svc.cluster.local -p 5432 -U postgres; do echo waiting for database; sleep 2; done;"
       containers:
         - name: backend
-          image: syedmehfooz/hrms-backend:v1.12
+          image: syedmehfooz/hrms-backend:v1.14
           ports:
             - containerPort: 4000
           livenessProbe:
