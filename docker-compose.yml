@@ -1,0 +1,63 @@
+version: "3.8"
+
+services:
+  postgres:
+    container_name: postgres-service
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: hrms
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - hrms-network
+
+  backend-service:
+    container_name: backend-service
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.docker
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=postgrespassword
+      - DB_NAME=hrms
+      - DB_HOST=postgres
+      - DB_PORT=5432
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      - postgres
+    networks:
+      - hrms-network
+
+  frontend:
+    container_name: frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./.env.docker
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend-service
+    networks:
+      - hrms-network
+
+volumes:
+  postgres_data:
+
+networks:
+  hrms-network:
+    driver: bridge

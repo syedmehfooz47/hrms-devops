@@ -1,0 +1,135 @@
+@Library('Shared') _
+pipeline {
+    agent any
+    
+    environment{
+        GIT_URL = "https://github.com/syedmehfooz47/hrms-devops.git"
+        GIT_BRANCH = "main"
+        GIT_CREDENTIALS = "Github-Credentials"
+    }
+
+    parameters {
+        string(name: 'DOCKER_TAG', defaultValue: '', description: 'Docker tag of the image built by the CI job')
+    }
+
+    stages {
+        stage("Workspace cleanup"){
+            steps{
+                script{
+                    cleanWs()
+                }
+            }
+        }
+        
+        stage('Git: Code Checkout') {
+            steps {
+                script{
+                    code_checkout(env.GIT_URL,env.GIT_BRANCH)
+                }
+            }
+        }
+        
+        stage('Verify: Docker Image Tags') {
+            steps {
+                script{
+                    echo "DOCKER_TAG: ${params.DOCKER_TAG}"
+                }
+            }
+        }
+        
+        
+        stage("Update: Kubernetes manifests"){ 
+            steps{
+                script{
+                    dir('kubernetes'){
+                        sh """
+                            sed -i -e s/hrms-backend.*/hrms-backend:${params.DOCKER_TAG}/g backend.yml
+                        """
+                    }
+                    
+
+                    dir('kubernetes'){
+                        sh """
+                            sed -i -e s/hrms-frontend.*/hrms-frontend:${params.DOCKER_TAG}/g frontend.yml
+                        """
+                    }
+                    
+                }
+            }
+        }
+        
+        stage("Git: Code update and push to GitHub"){
+            steps{
+                script{
+                    withCredentials([gitUsernamePassword(credentialsId: env.GIT_CREDENTIALS, gitToolName: 'Default')]) {
+                        sh """
+                        echo "Checking repository status: "
+                        git status
+                    
+                        echo "Adding changes to git: "
+                        git add .
+                        
+                        echo "Commiting changes: "
+                        git commit -m "Update Kubernetes manifests [skip ci]"
+                        
+                        echo "Pushing changes to github: "
+                        git push ${env.GIT_URL} ${env.GIT_BRANCH}
+                        """
+                    }
+                }
+            }
+        }
+    }
+  post {
+        always {
+            generate_reports(projectName: 'HRMS-CD', imageName: 'hrms-frontend, hrms-backend', imageTag: "${params.DOCKER_TAG},${params.DOCKER_TAG}")
+        }
+        success {
+            script {
+                emailext attachLog: true,
+                attachmentsPattern: 'reports/build-report.txt',
+                from: 'jenkins@alerts.syedmehfooz.com',
+                subject: "HRMS Application has been updated and deployed - '${currentBuild.result}'",
+                body: """
+                    <html>
+                    <body>
+                        <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
+                            <p style="color: black; font-weight: bold;">Project: ${env.JOB_NAME}</p>
+                        </div>
+                        <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
+                            <p style="color: black; font-weight: bold;">Build Number: ${env.BUILD_NUMBER}</p>
+                        </div>
+                        <div style="background-color: #87CEEB; padding: 10px; margin-bottom: 10px;">
+                            <p style="color: black; font-weight: bold;">URL: ${env.BUILD_URL}</p>
+                        </div>
+                    </body>
+                    </html>
+            """,
+            to: 'hello@syedmehfooz.com',
+            mimeType: 'text/html'
+            }
+        }
+      failure {
+            script {
+                emailext attachLog: true,
+                attachmentsPattern: 'reports/build-report.txt',
+                from: 'jenkins@alerts.syedmehfooz.com',
+                subject: "HRMS Application build failed - '${currentBuild.result}'",
+                body: """
+                    <html>
+                    <body>
+                        <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
+                            <p style="color: black; font-weight: bold;">Project: ${env.JOB_NAME}</p>
+                        </div>
+                        <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
+                            <p style="color: black; font-weight: bold;">Build Number: ${env.BUILD_NUMBER}</p>
+                        </div>
+                    </body>
+                    </html>
+            """,
+            to: 'hello@syedmehfooz.com',
+            mimeType: 'text/html'
+            }
+        }
+    }
+}
