@@ -19,7 +19,7 @@ The HRMS application follows a standard 3-tier architecture deployed on a local 
 3. **Database**: PostgreSQL 16 with a persistent local-path volume, featuring automatic schema initialization on boot.
 
 ### Network Flow:
-Internet -> cPanel Reverse Proxy (`hrms.syedmehfooz.com`) -> VPS `systemd` `socat` proxy (`127.0.0.1:8276`) -> Kind Worker Node IP (`172.23.0.2:31010`) -> Kubernetes Frontend `NodePort` Service -> Frontend Pod.
+Internet -> CDN -> Reverse Proxy (`hrms.syedmehfooz.com`) -> Server -> Kubernetes Cluster -> Service -> Frontend Pod.
 
 ---
 
