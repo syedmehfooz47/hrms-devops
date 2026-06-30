@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { employeeService, departmentService, userService } from "@/services/api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,12 +11,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Loader2, Trash2 } from "lucide-react";
+import { Plus, Search, Loader2, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { useMe } from "@/hooks/use-me";
 import { isHrOrAdmin } from "@/lib/hrms";
 
-export const Route = createFileRoute("/_authenticated/employees")({
+export const Route = createFileRoute("/_authenticated/employees/")({
   component: EmployeesPage,
 });
 
@@ -142,9 +142,18 @@ function EmployeesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {canManage && (
-                        <Button variant="ghost" size="icon" onClick={() => { if (confirm("Remove this employee?")) deleteMut.mutate(r.id); }}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Link 
+                            to="/employees/$id" 
+                            params={{ id: String(r.id) }} 
+                            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-8 w-8"
+                          >
+                            <Edit className="h-4 w-4 text-primary" />
+                          </Link>
+                          <Button variant="ghost" size="icon" onClick={() => { if (confirm("Remove this employee?")) deleteMut.mutate(r.id); }}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>
@@ -160,8 +169,13 @@ function EmployeesPage() {
 
 function NewEmployeeDialog({ departments, candidates }: { departments: any[]; candidates: any[] }) {
   const [open, setOpen] = useState(false);
+  const [createNewAccount, setCreateNewAccount] = useState(candidates.length === 0);
   const [form, setForm] = useState({
     profile_id: "",
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
     employee_code: "",
     department_id: "",
     designation: "",
@@ -170,14 +184,29 @@ function NewEmployeeDialog({ departments, candidates }: { departments: any[]; ca
     date_of_joining: new Date().toISOString().slice(0, 10),
     salary_basic: "",
   });
+
+  // Automatically switch to create account mode if no candidates exist
+  useEffect(() => {
+    if (candidates.length === 0) {
+      setCreateNewAccount(true);
+    }
+  }, [candidates]);
+
   const qc = useQueryClient();
 
   const mut = useMutation({
     mutationFn: async () => {
-      if (!form.profile_id) throw new Error("Pick a user");
+      if (!createNewAccount && !form.profile_id) throw new Error("Pick a user");
+      if (createNewAccount && !form.name) throw new Error("Full name is required");
+      if (createNewAccount && !form.email) throw new Error("Email is required");
       if (!form.employee_code) throw new Error("Employee code is required");
+
       await employeeService.create({
-        user_id: form.profile_id,
+        user_id: createNewAccount ? null : form.profile_id,
+        name: createNewAccount ? form.name : null,
+        email: createNewAccount ? form.email : null,
+        phone: createNewAccount ? form.phone : null,
+        password: createNewAccount ? form.password || "Welcome@2026" : null,
         employee_code: form.employee_code,
         department_id: form.department_id ? Number(form.department_id) : null,
         designation: form.designation || null,
@@ -193,6 +222,20 @@ function NewEmployeeDialog({ departments, candidates }: { departments: any[]; ca
       qc.invalidateQueries({ queryKey: ["non-employees"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       setOpen(false);
+      setForm({
+        profile_id: "",
+        name: "",
+        email: "",
+        phone: "",
+        password: "",
+        employee_code: "",
+        department_id: "",
+        designation: "",
+        employment_type: "full_time",
+        status: "active",
+        date_of_joining: new Date().toISOString().slice(0, 10),
+        salary_basic: "",
+      });
     },
     onError: (e: any) => toast.error(e.response?.data?.message || e.message),
   });
@@ -205,21 +248,57 @@ function NewEmployeeDialog({ departments, candidates }: { departments: any[]; ca
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>New employee</DialogTitle>
-          <DialogDescription>Promote an existing user account into an employee record.</DialogDescription>
+          <DialogDescription>Add a new employee and link or create their user account.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          <div className="space-y-1.5">
-            <Label>User account</Label>
-            <Select value={form.profile_id} onValueChange={(v) => setForm({ ...form, profile_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Pick a registered user" /></SelectTrigger>
-              <SelectContent>
-                {candidates.length === 0 && <div className="px-2 py-2 text-xs text-muted-foreground">All users already employees.</div>}
-                {candidates.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.full_name || c.email} — {c.email}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {candidates.length > 0 && (
+            <div className="flex items-center space-x-2 py-1">
+              <input
+                type="checkbox"
+                id="create_new_account"
+                checked={createNewAccount}
+                onChange={(e) => setCreateNewAccount(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              />
+              <Label htmlFor="create_new_account" className="cursor-pointer font-normal text-sm">Create a brand new user account for this employee</Label>
+            </div>
+          )}
+
+          {createNewAccount ? (
+            <div className="space-y-3 border-l-2 border-primary/20 pl-3">
+              <div className="space-y-1.5">
+                <Label>Full name</Label>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="John Doe" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Email address</Label>
+                  <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="john@example.com" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Phone number</Label>
+                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+1234567890" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Default password</Label>
+                <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Welcome@2026 (Leave blank to use default)" />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label>User account</Label>
+              <Select value={form.profile_id} onValueChange={(v) => setForm({ ...form, profile_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Pick a registered user" /></SelectTrigger>
+                <SelectContent>
+                  {candidates.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.full_name || c.email} — {c.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Employee code</Label>

@@ -5,7 +5,11 @@ export const Route = createFileRoute("/")({
   ssr: false,
   beforeLoad: async () => {
     if (authService.isAuthenticated()) {
-      throw redirect({ to: "/dashboard" });
+      const user = authService.getCurrentUser();
+      if (user && (user.role === "admin" || user.role === "hr_manager")) {
+        throw redirect({ to: "/dashboard" });
+      }
+      throw redirect({ to: "/profile" });
     }
     throw redirect({ to: "/auth" });
   },

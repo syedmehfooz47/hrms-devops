@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Award, Plus, Star, Target, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Cell } from "recharts";
 
 export const Route = createFileRoute("/_authenticated/performance")({
   component: PerformancePage,
@@ -121,11 +121,10 @@ function PerformancePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card><CardHeader className="pb-2"><CardDescription>Avg rating</CardDescription><CardTitle className="text-2xl">{(myReviews.data?.length ? avgRating : 0).toFixed(1)}</CardTitle></CardHeader><CardContent><Stars value={myReviews.data?.length ? avgRating : 0} /></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardDescription>Active goals</CardDescription><CardTitle className="text-2xl">{goalsActive}</CardTitle></CardHeader><CardContent><Target className="h-5 w-5 text-muted-foreground" /></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardDescription>Completed goals</CardDescription><CardTitle className="text-2xl">{goalsCompleted}</CardTitle></CardHeader><CardContent><Award className="h-5 w-5 text-muted-foreground" /></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardDescription>Avg progress</CardDescription><CardTitle className="text-2xl">{isNaN(avgProgress) ? 0 : avgProgress}%</CardTitle></CardHeader><CardContent><Progress value={isNaN(avgProgress) ? 0 : avgProgress} /></CardContent></Card>
       </div>
 
       <Tabs defaultValue="goals">
@@ -173,7 +172,17 @@ function PerformancePage() {
                 <BarChart data={goalsByStatus}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip />
-                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {goalsByStatus.map((entry, index) => {
+                      const colors: Record<string, string> = {
+                        "not started": "hsl(var(--muted-foreground))",
+                        "in progress": "#3b82f6", // blue-500
+                        "completed": "#10b981", // emerald-500
+                        "cancelled": "#ef4444", // red-500
+                      };
+                      return <Cell key={`cell-${index}`} fill={colors[entry.name] || "hsl(var(--primary))"} />;
+                    })}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -255,13 +264,14 @@ function GoalCard({ goal, onChange }: { goal: Goal; onChange: () => void }) {
           {goal.category && <span>Category: {goal.category}</span>}
           {goal.target_date && <span>Target: {new Date(goal.target_date).toLocaleDateString()}</span>}
         </div>
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs"><span>Progress</span><span>{progress}%</span></div>
-          <Progress value={progress} />
-          <Input type="range" min={0} max={100} value={progress} onChange={(e) => setProgress(Number(e.target.value))} />
-        </div>
-        <div className="flex gap-2 items-center">
-          <Select value={status} onValueChange={(v) => setStatus(v as Goal["status"])}>
+        <div className="flex gap-2 items-center pt-1">
+          <Select value={status} onValueChange={(v) => {
+            const s = v as Goal["status"];
+            setStatus(s);
+            if (s === "completed") setProgress(100);
+            else if (s === "not_started" || s === "cancelled") setProgress(0);
+            else if (s === "in_progress") setProgress(50);
+          }}>
             <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="not_started">Not started</SelectItem>

@@ -149,12 +149,32 @@ router.post("/", authorize("admin", "hr_manager"), async (req, res) => {
       address,
       emergency_contact_name,
       emergency_contact_phone,
+      password,
     } = req.body;
 
-    const finalUserId = user_id || profile_id || null;
+    let finalUserId = user_id || profile_id || null;
     let finalName = name;
     let finalEmail = email;
     let finalPhone = phone;
+
+    // If no user account is linked, create one automatically if email is provided
+    if (!finalUserId && finalEmail) {
+      const checkUser = await pool.query("SELECT id FROM users WHERE email = $1", [finalEmail]);
+      if (checkUser.rows.length > 0) {
+        finalUserId = checkUser.rows[0].id;
+      } else {
+        const bcrypt = require("bcryptjs");
+        const defaultPassword = password || "Welcome@2026";
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+        const newUserRes = await pool.query(
+          `INSERT INTO users (name, email, password, role, phone)
+           VALUES ($1, $2, $3, 'employee', $4)
+           RETURNING id`,
+          [finalName || "New Employee", finalEmail, hashedPassword, finalPhone || null]
+        );
+        finalUserId = newUserRes.rows[0].id;
+      }
+    }
 
     // If user_id is provided, fetch missing info from users table
     if (finalUserId) {

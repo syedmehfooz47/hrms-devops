@@ -31,7 +31,7 @@ function EmployeeDetailPage() {
     },
   });
 
-  const canManage = isHrOrAdmin(roles) || user?.role === "admin" || (data && String(user?.id) === String(data.user_id));
+  const canManage = isHrOrAdmin(roles) || user?.role === "admin";
 
   const [form, setForm] = useState<any>({});
   useEffect(() => { if (data) setForm(data); }, [data]);
@@ -105,10 +105,10 @@ function EmployeeDetailPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Personal</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            <Field label="Full name"><Input disabled={!canManage} value={form.profiles?.full_name ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...form.profiles, full_name: e.target.value } })} /></Field>
-            <Field label="Email"><Input disabled={!canManage} value={form.profiles?.email ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...form.profiles, email: e.target.value } })} /></Field>
-            <Field label="Phone"><Input disabled={!canManage} value={form.profiles?.phone ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...form.profiles, phone: e.target.value } })} /></Field>
-            <Field label="Date of birth"><Input disabled={!canManage} type="date" value={form.date_of_birth ?? ""} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} /></Field>
+            <Field label="Full name"><Input disabled={!canManage} value={form.profiles?.full_name ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...(form.profiles || {}), full_name: e.target.value } })} /></Field>
+            <Field label="Email"><Input disabled={!canManage} value={form.profiles?.email ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...(form.profiles || {}), email: e.target.value } })} /></Field>
+            <Field label="Phone"><Input disabled={!canManage} value={form.profiles?.phone ?? ""} onChange={(e) => setForm({ ...form, profiles: { ...(form.profiles || {}), phone: e.target.value } })} /></Field>
+            <Field label="Date of birth"><Input disabled={!canManage} type="date" value={form.date_of_birth ? String(form.date_of_birth).slice(0, 10) : ""} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} /></Field>
             <Field label="Address"><Textarea disabled={!canManage} value={form.address ?? ""} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
           </CardContent>
         </Card>
@@ -118,7 +118,7 @@ function EmployeeDetailPage() {
           <CardContent className="space-y-3">
             <Field label="Designation"><Input disabled={!canManage} value={form.designation ?? ""} onChange={(e) => setForm({ ...form, designation: e.target.value })} /></Field>
             <Field label="Department">
-              <Select disabled={!canManage} value={form.department_id ?? ""} onValueChange={(v) => setForm({ ...form, department_id: v })}>
+              <Select disabled={!canManage} value={form.department_id ? String(form.department_id) : ""} onValueChange={(v) => setForm({ ...form, department_id: v })}>
                 <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                 <SelectContent>{depts.map((d: any) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}</SelectContent>
               </Select>
@@ -145,7 +145,7 @@ function EmployeeDetailPage() {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Joining date"><Input disabled={!canManage} type="date" value={form.date_of_joining ?? ""} onChange={(e) => setForm({ ...form, date_of_joining: e.target.value })} /></Field>
+            <Field label="Joining date"><Input disabled={!canManage} type="date" value={form.date_of_joining ? String(form.date_of_joining).slice(0, 10) : ""} onChange={(e) => setForm({ ...form, date_of_joining: e.target.value })} /></Field>
             <Field label="Basic salary"><Input disabled={!canManage} type="number" value={form.salary_basic ?? ""} onChange={(e) => setForm({ ...form, salary_basic: e.target.value })} /></Field>
           </CardContent>
         </Card>

@@ -3,7 +3,11 @@ import { authService, employeeService } from "@/services/api";
 import type { AppRole } from "@/lib/hrms";
 
 export function useMe() {
-  const { data: user } = useQuery({
+  // Synchronously fetch initial values from localStorage for instant page rendering
+  const initialUser = authService.getCurrentUser();
+  const initialRoles = initialUser?.role ? [initialUser.role as AppRole] : ([] as AppRole[]);
+
+  const { data: user = initialUser } = useQuery({
     queryKey: ["auth-user"],
     queryFn: async () => {
       return authService.getCurrentUser();
@@ -56,7 +60,7 @@ export function useMe() {
     },
   });
 
-  const { data: roles = [] as AppRole[] } = useQuery({
+  const { data: roles = initialRoles } = useQuery({
     queryKey: ["my-roles", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {

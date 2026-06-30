@@ -91,7 +91,7 @@ function AuthenticatedLayout() {
             {sections.map((sec) => {
               const items = navItems.filter((i) => {
                 if (i.section !== sec.id) return false;
-                if (i.url === "/analytics" || i.url === "/departments") {
+                if (i.url === "/dashboard" || i.url === "/analytics" || i.url === "/departments") {
                   return isHrOrAdmin(roles);
                 }
                 if (i.url === "/recruitment") {
