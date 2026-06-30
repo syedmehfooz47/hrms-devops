@@ -16,14 +16,37 @@ spec:
       labels:
         app: backend
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16
+          command:
+            - sh
+            - -c
+            - "until pg_isready -h postgres-service.hrms.svc.cluster.local -p 5432 -U postgres; do echo waiting for database; sleep 2; done;"
       containers:
         - name: backend
           image: syedmehfooz/hrms-backend:v1.8
           ports:
             - containerPort: 4000
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           env:
             - name: DB_HOST
-              value: "postgres-service"
+              value: "postgres-service.hrms.svc.cluster.local"
             - name: DB_PORT
               value: "5432"
             - name: DB_USER

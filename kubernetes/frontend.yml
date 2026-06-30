@@ -16,11 +16,34 @@ spec:
       labels:
         app: frontend
     spec:
+      initContainers:
+        - name: wait-for-backend
+          image: busybox:1.28
+          command:
+            - sh
+            - -c
+            - "until wget -q -O - http://backend-service.hrms.svc.cluster.local:4000/ > /dev/null 2>&1; do echo waiting for backend; sleep 2; done;"
       containers:
         - name: frontend
           image: syedmehfooz/hrms-frontend:v1.8
           ports:
             - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           env:
             - name: PORT
               value: "3000"
@@ -28,6 +51,22 @@ spec:
           image: nginx:alpine
           ports:
             - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: nginx-config
               mountPath: /etc/nginx/conf.d
@@ -48,7 +87,7 @@ data:
         server_name _;
 
         location /api/ {
-            proxy_pass http://backend-service:4000/api/;
+            proxy_pass http://backend-service.hrms.svc.cluster.local:4000/api/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

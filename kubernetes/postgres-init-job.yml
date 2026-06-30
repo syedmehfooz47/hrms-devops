@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-schema-init
+  namespace: hrms
+spec:
+  template:
+    spec:
+      containers:
+      - name: db-init
+        image: postgres:16
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Initializing database schema..."
+          PGPASSWORD=postgrespassword psql -h postgres-service.hrms.svc.cluster.local -U postgres -d hrms -f /schema/01-schema.sql
+          PGPASSWORD=postgrespassword psql -h postgres-service.hrms.svc.cluster.local -U postgres -d hrms -f /schema/02-add-ai-columns.sql
+          echo "Database initialized successfully!"
+        volumeMounts:
+        - name: schema-volume
+          mountPath: /schema
+      restartPolicy: Never
+      volumes:
+      - name: schema-volume
+        configMap:
+          name: postgres-init-script
+  backoffLimit: 4
