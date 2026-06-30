@@ -13,6 +13,8 @@ spec:
         - /bin/sh
         - -c
         - |
+          echo "Waiting for database to be ready..."
+          until pg_isready -h postgres-service.hrms.svc.cluster.local -p 5432 -U postgres; do sleep 2; done;
           echo "Initializing database schema..."
           PGPASSWORD=postgrespassword psql -h postgres-service.hrms.svc.cluster.local -U postgres -d hrms -f /schema/01-schema.sql
           PGPASSWORD=postgrespassword psql -h postgres-service.hrms.svc.cluster.local -U postgres -d hrms -f /schema/02-add-ai-columns.sql
