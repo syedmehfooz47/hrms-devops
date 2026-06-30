@@ -69,6 +69,9 @@ pipeline {
                         echo "Adding changes to git: "
                         git add .
                         
+                        git config user.email "syedmehfoozcs@gmail.com"
+                        git config user.name "syedmehfooz47"
+
                         echo "Commiting changes: "
                         git commit -m "Update Kubernetes manifests [skip ci]"
                         
