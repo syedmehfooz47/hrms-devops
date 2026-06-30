@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: syedmehfooz/hrms-backend:v1.8
+          image: syedmehfooz/hrms-backend:v1.10
           ports:
             - containerPort: 4000
           env:

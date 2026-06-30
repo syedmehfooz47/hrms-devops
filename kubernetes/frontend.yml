@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: syedmehfooz/hrms-frontend:v1.8
+          image: syedmehfooz/hrms-frontend:v1.10
           ports:
             - containerPort: 3000
           env:
