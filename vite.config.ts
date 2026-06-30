@@ -12,22 +12,4 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  vite: {
-    server: {
-      proxy: {
-        '/api': {
-          target: 'http://backend-service:4000',
-          changeOrigin: true,
-        }
-      }
-    },
-    preview: {
-      proxy: {
-        '/api': {
-          target: 'http://backend-service:4000',
-          changeOrigin: true,
-        }
-      }
-    }
-  }
 });

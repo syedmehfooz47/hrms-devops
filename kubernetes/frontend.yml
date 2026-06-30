@@ -18,10 +18,49 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: syedmehfooz/hrms-frontend:v1.6
+          image: syedmehfooz/hrms-frontend:v1.8
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+        - name: nginx
+          image: nginx:alpine
           ports:
             - containerPort: 80
-          
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: frontend-nginx-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-nginx-config
+  namespace: hrms
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+
+        location /api/ {
+            proxy_pass http://backend-service:4000/api/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location / {
+            proxy_pass http://localhost:3000/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
 ---
 apiVersion: v1
 kind: Service
