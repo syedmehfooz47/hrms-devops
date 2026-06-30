@@ -25,7 +25,7 @@ spec:
             - "until wget -q -O - http://backend-service.hrms.svc.cluster.local:4000/ > /dev/null 2>&1; do echo waiting for backend; sleep 2; done;"
       containers:
         - name: frontend
-          image: syedmehfooz/hrms-frontend:v1.16
+          image: syedmehfooz/hrms-frontend:v1.20
           ports:
             - containerPort: 3000
           livenessProbe:
