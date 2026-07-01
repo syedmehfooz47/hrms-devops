@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isHrOrAdmin, isManagerOrAbove } from "@/lib/hrms";
+import { Chatbot } from "@/components/chatbot";
 
 
 export const Route = createFileRoute("/_authenticated")({
@@ -42,7 +43,6 @@ const navItems = [
   { title: "Leave", url: "/leave", icon: CalendarDays, section: "time" },
   { title: "Payroll", url: "/payroll", icon: Wallet, section: "finance" },
   { title: "Performance", url: "/performance", icon: Award, section: "growth" },
-  { title: "Recruitment", url: "/recruitment", icon: Briefcase, section: "growth" },
   { title: "Documents", url: "/documents", icon: FileText, section: "growth" },
   { title: "My Profile", url: "/profile", icon: UserCircle, section: "account" },
 ] as const;
@@ -91,17 +91,14 @@ function AuthenticatedLayout() {
             {sections.map((sec) => {
               const items = navItems.filter((i) => {
                 if (i.section !== sec.id) return false;
-                if (i.url === "/analytics" || i.url === "/departments") {
+                if (i.url === "/dashboard" || i.url === "/analytics" || i.url === "/departments" || i.url === "/employees") {
                   return isHrOrAdmin(roles);
-                }
-                if (i.url === "/recruitment") {
-                  return isManagerOrAbove(roles);
                 }
                 return true;
               });
               if (!items.length) return null;
               return (
-                <SidebarGroup key={sec.id}>
+                <SidebarGroup key={sec.id} className={sec.id === "account" ? "mt-auto" : ""}>
                   <SidebarGroupLabel>{sec.label}</SidebarGroupLabel>
                   <SidebarGroupContent>
                     <SidebarMenu>
@@ -166,6 +163,7 @@ function AuthenticatedLayout() {
             <Outlet />
           </main>
         </div>
+        <Chatbot />
       </div>
     </SidebarProvider>
   );
