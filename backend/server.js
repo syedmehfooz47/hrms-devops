@@ -15,6 +15,8 @@ const documentsRoutes = require("./routes/documents");
 const dashboardRoutes = require("./routes/dashboard");
 const notificationRoutes = require("./routes/notifications");
 const userRoutes = require("./routes/users");
+const chatRoutes = require("./routes/chat");
+const aiRoutes = require("./routes/ai");
 
 const app = express();
 
@@ -57,6 +59,8 @@ app.use("/api/documents", documentsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Centralized error handler
 app.use((err, req, res, next) => {

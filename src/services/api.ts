@@ -425,4 +425,28 @@ export const userService = {
   },
 };
 
+export const chatService = {
+  sendMessage: async (message: string, history: any[]) => {
+    const { data } = await api.post("/chat", { message, history });
+    return data;
+  },
+};
+// ─── AI Tools ────────────────────────────────────────────
+export const aiService = {
+  screenResume: async (formData: FormData) => {
+    const { data } = await api.post("/ai/screen-resume", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000, // 2 min timeout for AI processing
+    });
+    return data;
+  },
+
+  generateJD: async (payload: { job_title: string; notes?: string; department?: string; employment_type?: string }) => {
+    const { data } = await api.post("/ai/generate-jd", payload, {
+      timeout: 60000,
+    });
+    return data;
+  },
+};
+
 export default api;

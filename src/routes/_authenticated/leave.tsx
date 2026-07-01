@@ -123,10 +123,10 @@ function LeavePage() {
               <CardContent>
                 <div className="flex items-baseline gap-2">
                   <div className="text-3xl font-bold">{remaining}</div>
-                  <div className="text-xs text-muted-foreground">/ {allocated} days</div>
+                  <div className="text-xs text-muted-foreground">Remaining leave (of {allocated})</div>
                 </div>
                 <Progress value={pct} className="mt-2 h-1.5" />
-                <div className="text-xs text-muted-foreground mt-1.5">{used} used</div>
+                <div className="text-xs text-muted-foreground mt-1.5">{used} Used leave</div>
               </CardContent>
             </Card>
           );

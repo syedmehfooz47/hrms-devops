@@ -23,35 +23,42 @@ export const Route = createFileRoute("/_authenticated/attendance")({
 function AttendancePage() {
   const { roles, employee } = useMe();
   const canManage = isManagerOrAbove(roles);
+  const isAdmin = roles.includes("admin") || roles.includes("hr_manager");
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Attendance</h1>
-        <p className="text-sm text-muted-foreground">Track your time, view team activity, and analyse trends.</p>
+        <p className="text-sm text-muted-foreground">
+          {isAdmin ? "View team attendance and analyse trends." : "Track your time, view reports, and analyse trends."}
+        </p>
       </div>
 
-      <Tabs defaultValue="me" className="space-y-5">
+      <Tabs defaultValue={isAdmin ? "team" : "me"} className="space-y-5">
         <TabsList>
-          <TabsTrigger value="me"><Clock className="h-4 w-4 mr-2" />My Attendance</TabsTrigger>
-          <TabsTrigger value="reports"><BarChart3 className="h-4 w-4 mr-2" />Reports</TabsTrigger>
+          {!isAdmin && <TabsTrigger value="me"><Clock className="h-4 w-4 mr-2" />My Attendance</TabsTrigger>}
+          {!isAdmin && <TabsTrigger value="reports"><BarChart3 className="h-4 w-4 mr-2" />Reports</TabsTrigger>}
           {canManage && <TabsTrigger value="team"><Users className="h-4 w-4 mr-2" />Team</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="me" className="space-y-5">
-          {employee?.id ? (
-            <MyAttendance employeeId={employee.id} />
-          ) : (
-            <div className="text-sm text-muted-foreground p-4">No employee record associated with your user.</div>
-          )}
-        </TabsContent>
-        <TabsContent value="reports" className="space-y-5">
-          {employee?.id ? (
-            <Reports employeeId={employee.id} />
-          ) : (
-            <div className="text-sm text-muted-foreground p-4">No employee record associated with your user.</div>
-          )}
-        </TabsContent>
+        {!isAdmin && (
+          <TabsContent value="me" className="space-y-5">
+            {employee?.id ? (
+              <MyAttendance employeeId={employee.id} />
+            ) : (
+              <div className="text-sm text-muted-foreground p-4">No employee record associated with your user.</div>
+            )}
+          </TabsContent>
+        )}
+        {!isAdmin && (
+          <TabsContent value="reports" className="space-y-5">
+            {employee?.id ? (
+              <Reports employeeId={employee.id} />
+            ) : (
+              <div className="text-sm text-muted-foreground p-4">No employee record associated with your user.</div>
+            )}
+          </TabsContent>
+        )}
         {canManage && <TabsContent value="team" className="space-y-5"><TeamAttendance /></TabsContent>}
       </Tabs>
     </div>
@@ -151,7 +158,7 @@ function MyAttendance({ employeeId }: { employeeId: number | string }) {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <KpiCard label="Present" value={summary.counts.present} tone="emerald" />
+        <KpiCard label="Total Present" value={summary.counts.present + summary.counts.late + summary.counts.half_day} tone="emerald" />
         <KpiCard label="Late" value={summary.counts.late} tone="amber" />
         <KpiCard label="Half day" value={summary.counts.half_day} tone="blue" />
         <KpiCard label="Absent" value={summary.counts.absent} tone="destructive" />
@@ -377,7 +384,7 @@ function TeamAttendance() {
     <>
       <div className="grid gap-4 md:grid-cols-5">
         <KpiCard label="Headcount" value={people.length} />
-        <KpiCard label="Present" value={counts.present} tone="emerald" />
+        <KpiCard label="Total Present" value={counts.present + counts.late + counts.half_day} tone="emerald" />
         <KpiCard label="Late" value={counts.late} tone="amber" />
         <KpiCard label="Half day" value={counts.half_day} tone="blue" />
         <KpiCard label="Absent" value={counts.absent} tone="destructive" />
