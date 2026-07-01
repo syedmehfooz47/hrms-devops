@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { dashboardService } from "@/services/api";
+import { dashboardService, authService } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Users, Building2, CalendarDays, Clock, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend } from "recharts";
@@ -8,6 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  beforeLoad: () => {
+    const user = authService.getCurrentUser();
+    if (!user || (user.role !== "admin" && user.role !== "hr_manager")) {
+      throw redirect({ to: "/profile" });
+    }
+  },
   component: Dashboard,
 });
 
@@ -147,4 +153,3 @@ function Dashboard() {
     </div>
   );
 }
-

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Loader2, Building2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMe } from "@/hooks/use-me";
 import { isHrOrAdmin } from "@/lib/hrms";
@@ -68,9 +68,12 @@ function DepartmentsPage() {
               <div className="flex items-start justify-between">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center"><Building2 className="h-5 w-5" /></div>
                 {canManage && (
-                  <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition" onClick={() => { if (confirm(`Delete ${d.name}?`)) delMut.mutate(d.id); }}>
-                     <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                    <EditDeptDialog dept={d} />
+                    <Button variant="ghost" size="icon" onClick={() => { if (confirm(`Delete ${d.name}?`)) delMut.mutate(d.id); }}>
+                       <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 )}
               </div>
               <h3 className="font-semibold mt-3">{d.name}</h3>
@@ -81,6 +84,47 @@ function DepartmentsPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+function EditDeptDialog({ dept }: { dept: any }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(dept.name);
+  const [description, setDescription] = useState(dept.description || "");
+  const qc = useQueryClient();
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!name.trim()) throw new Error("Name required");
+      await departmentService.update(dept.id, { name: name.trim(), description: description || undefined });
+    },
+    onSuccess: () => {
+      toast.success("Department updated");
+      qc.invalidateQueries({ queryKey: ["departments-page"] });
+      qc.invalidateQueries({ queryKey: ["departments-list"] });
+      qc.invalidateQueries({ queryKey: ["dept-breakdown"] });
+      setOpen(false);
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (v) { setName(dept.name); setDescription(dept.description || ""); } }}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon"><Pencil className="h-4 w-4" /></Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit department</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5"><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
+          <div className="space-y-1.5"><Label>Description</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>{mut.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -123,4 +167,3 @@ function NewDeptDialog() {
     </Dialog>
   );
 }
-
