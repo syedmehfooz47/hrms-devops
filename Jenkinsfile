@@ -42,20 +42,7 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                script {
-                    withEnv(["PATH+NODE=${WORKSPACE}/node_bin/bin"]) {
-                        echo "Running Backend Tests..."
-                        dir('backend') {
-                            sh 'npm install'
-                            sh 'npm test'
-                        }
-                        echo "Running Frontend Tests..."
-                        dir('.') {
-                            sh 'npm install'
-                            sh 'npm run test'
-                        }
-                    }
-                }
+                run_tests()
             }
         }
 
