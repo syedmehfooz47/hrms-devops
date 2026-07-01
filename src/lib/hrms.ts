@@ -106,6 +106,6 @@ export const statusColor: Record<AttendanceStatus, string> = {
 };
 
 export const statusLabel: Record<AttendanceStatus, string> = {
-  present: "Present", absent: "Absent", late: "Late", half_day: "Half Day", pending: "Pending",
+  present: "Present", absent: "Absent", late: "Present (Late)", half_day: "Half Day", pending: "Pending",
 };
 

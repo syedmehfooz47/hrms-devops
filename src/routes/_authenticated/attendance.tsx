@@ -158,7 +158,7 @@ function MyAttendance({ employeeId }: { employeeId: number | string }) {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <KpiCard label="Present" value={summary.counts.present} tone="emerald" />
+        <KpiCard label="Total Present" value={summary.counts.present + summary.counts.late + summary.counts.half_day} tone="emerald" />
         <KpiCard label="Late" value={summary.counts.late} tone="amber" />
         <KpiCard label="Half day" value={summary.counts.half_day} tone="blue" />
         <KpiCard label="Absent" value={summary.counts.absent} tone="destructive" />
@@ -384,7 +384,7 @@ function TeamAttendance() {
     <>
       <div className="grid gap-4 md:grid-cols-5">
         <KpiCard label="Headcount" value={people.length} />
-        <KpiCard label="Present" value={counts.present} tone="emerald" />
+        <KpiCard label="Total Present" value={counts.present + counts.late + counts.half_day} tone="emerald" />
         <KpiCard label="Late" value={counts.late} tone="amber" />
         <KpiCard label="Half day" value={counts.half_day} tone="blue" />
         <KpiCard label="Absent" value={counts.absent} tone="destructive" />

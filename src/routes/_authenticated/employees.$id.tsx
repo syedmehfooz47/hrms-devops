@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { employeeService, departmentService, userService } from "@/services/api";
 import { useState, useEffect } from "react";
@@ -21,8 +21,15 @@ export const Route = createFileRoute("/_authenticated/employees/$id")({
 
 function EmployeeDetailPage() {
   const { id } = Route.useParams();
-  const { user, roles } = useMe();
+  const { user, roles, employee } = useMe();
   const qc = useQueryClient();
+
+  const canManage = isHrOrAdmin(roles) || user?.role === "admin";
+  const isSelf = String(employee?.id) === String(id);
+
+  if (!canManage && !isSelf) {
+    return <Navigate to="/profile" replace />;
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["employee", id],
@@ -30,8 +37,6 @@ function EmployeeDetailPage() {
       return await employeeService.getById(id);
     },
   });
-
-  const canManage = isHrOrAdmin(roles) || user?.role === "admin";
 
   const [form, setForm] = useState<any>({});
   useEffect(() => { if (data) setForm(data); }, [data]);
@@ -85,7 +90,9 @@ function EmployeeDetailPage() {
 
   return (
     <div className="space-y-5 max-w-4xl">
-      <Link to="/employees" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><ArrowLeft className="h-3.5 w-3.5" /> Back to employees</Link>
+      <Link to={canManage ? "/employees" : "/profile"} className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+        <ArrowLeft className="h-3.5 w-3.5" /> Back to {canManage ? "employees" : "profile"}
+      </Link>
 
       <Card>
         <CardContent className="p-6 flex items-center gap-4">

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { employeeService, departmentService, userService } from "@/services/api";
 import { useState, useEffect } from "react";
@@ -23,6 +23,11 @@ export const Route = createFileRoute("/_authenticated/employees/")({
 function EmployeesPage() {
   const { roles } = useMe();
   const canManage = isHrOrAdmin(roles);
+  
+  if (!canManage) {
+    return <Navigate to="/profile" replace />;
+  }
+
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const qc = useQueryClient();
