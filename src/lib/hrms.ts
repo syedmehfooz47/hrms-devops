@@ -79,15 +79,21 @@ export function workedHours(checkIn?: string | null, checkOut?: string | null) {
 
 export type AttendanceStatus = "present" | "absent" | "late" | "half_day" | "pending";
 
-export function attendanceStatus(row?: { check_in?: string | null; check_out?: string | null } | null): AttendanceStatus {
-  if (!row || !row.check_in) return "absent";
+export function attendanceStatus(row?: { check_in?: string | null; check_out?: string | null; status?: string } | null): AttendanceStatus {
+  if (!row) return "absent";
+  if (!row.check_in) return (row.status as AttendanceStatus) || "absent";
+
   const checkIn = new Date(row.check_in);
   const lateThreshold = new Date(checkIn);
-  lateThreshold.setHours(9, 30, 0, 0);
+  lateThreshold.setHours(10, 0, 0, 0);
   const isLate = checkIn.getTime() > lateThreshold.getTime();
-  if (!row.check_out) return isLate ? "late" : "pending";
-  const h = workedHours(row.check_in, row.check_out);
-  if (h < 4) return "half_day";
+
+  if (row.check_out) {
+    const h = workedHours(row.check_in, row.check_out);
+    if (h < 4) return "half_day";
+    return isLate ? "late" : "present";
+  }
+
   return isLate ? "late" : "present";
 }
 

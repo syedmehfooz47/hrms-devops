@@ -16,7 +16,7 @@ router.get("/", async (req, res) => {
       FROM employees e
       LEFT JOIN users u ON e.user_id = u.id
       LEFT JOIN departments d ON e.department_id = d.id
-      WHERE 1=1
+      WHERE (u.role != 'admin' OR u.role IS NULL)
     `;
     const queryParams = [];
     let paramIndex = 1;
