@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isHrOrAdmin, isManagerOrAbove } from "@/lib/hrms";
+import { Chatbot } from "@/components/chatbot";
 
 
 export const Route = createFileRoute("/_authenticated")({
@@ -162,6 +163,7 @@ function AuthenticatedLayout() {
             <Outlet />
           </main>
         </div>
+        <Chatbot />
       </div>
     </SidebarProvider>
   );

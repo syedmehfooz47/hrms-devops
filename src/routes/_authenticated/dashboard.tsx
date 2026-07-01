@@ -2,10 +2,11 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { dashboardService, authService } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, Building2, CalendarDays, Clock, TrendingUp } from "lucide-react";
+import { Users, Building2, CalendarDays, Clock, TrendingUp, BrainCircuit } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { JDGeneratorDialog } from "@/components/jd-generator";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   beforeLoad: () => {
@@ -122,6 +123,22 @@ function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick AI Actions */}
+      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+        <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <BrainCircuit className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold">AI-Powered Tools</h3>
+              <p className="text-sm text-muted-foreground">Generate professional job descriptions instantly with AI.</p>
+            </div>
+          </div>
+          <JDGeneratorDialog />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
